@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Profile', ~{::section})}">
+  <section>
+    <div class="ro-card" style="max-width: 640px;">
+      <h1 class="h3 mb-4">My profile</h1>
+      <table class="table">
+        <tbody>
+          <tr><th>Username</th>  <td th:text="${user.username}">user</td></tr>
+          <tr><th>Full name</th> <td th:text="${user.fullName}">name</td></tr>
+          <tr><th>Email</th>     <td th:text="${user.email}">email</td></tr>
+          <tr><th>Role</th>      <td th:text="${user.role}">role</td></tr>
+        </tbody>
+      </table>
+      <a th:href="@{/account/delete}" class="btn btn-outline-light mt-3">Delete my account</a>
+    </div>
+  </section>
+</div>
+</body>
+</html>

@@ -20,10 +20,13 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_pass}"]
-      interval: 10s
+      # Use 127.0.0.1 (TCP) rather than localhost (unix socket) so the
+      # healthcheck only passes once the network listener is up — otherwise
+      # the app container starts before MySQL is reachable over the network.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD:-root_pass} --silent"]
+      interval: 5s
       timeout: 5s
-      retries: 15
+      retries: 20
       start_period: 30s
     depends_on:
       setup:
@@ -43,6 +46,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-registrar}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-registrar_pass}
       SPRING_PROFILES_ACTIVE: docker
+    restart: on-failure:5
     depends_on:
       mysql:
         condition: service_healthy

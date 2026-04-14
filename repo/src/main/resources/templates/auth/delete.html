@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Delete account', ~{::section})}">
+  <section>
+    <div class="ro-card" style="max-width: 640px;">
+      <h1 class="h3 mb-3" style="color: var(--accent-red);">Delete account</h1>
+      <p style="color: var(--text-secondary);">
+        Your data will be exported to a downloadable JSON file and your account
+        will be soft-deleted. You will be unable to sign in immediately. After
+        7 days the account will be permanently anonymized.
+      </p>
+      <form th:action="@{/account/delete}" method="post" class="mt-4">
+        <button type="submit" class="btn btn-danger">Yes, export and delete my account</button>
+        <a th:href="@{/profile}" class="btn btn-outline-light ms-2">Cancel</a>
+      </form>
+    </div>
+  </section>
+</div>
+</body>
+</html>

@@ -1,28 +1,35 @@
 package com.registrarops.config;
 
+import com.registrarops.security.AuthEventHandlers;
+import com.registrarops.security.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 /**
- * Spring Security configuration.
+ * Phase 2 SecurityConfig.
  *
- * Phase 0: in-memory users so the app boots and Phase 0 verification passes.
- * Phase 2 replaces the InMemoryUserDetailsManager with the DB-backed
- * CustomUserDetailsService and adds lockout / device binding integration.
- *
- * CSRF is enabled (Cookie repo) so every Thymeleaf form must include the token.
+ * - DB-backed authentication via {@link CustomUserDetailsService} (replaces the
+ *   Phase 0 in-memory placeholder).
+ * - BCryptPasswordEncoder(strength=12).
+ * - CSRF enabled with CookieCsrfTokenRepository so HTMX can read the token from
+ *   a cookie / meta tag and resend it on every mutating request.
+ * - Form login points at custom /login; success and failure are handled by
+ *   {@link AuthEventHandlers} (lockout integration).
+ * - Role-based URL rules per the business prompt's role matrix.
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     @Bean
@@ -31,31 +38,25 @@ public class SecurityConfig {
     }
 
     @Bean
-    public InMemoryUserDetailsManager userDetailsService(PasswordEncoder encoder) {
-        UserDetails admin = User.withUsername("admin")
-                .password(encoder.encode("Admin@Registrar24!"))
-                .roles("ADMIN")
-                .build();
-        UserDetails faculty = User.withUsername("faculty")
-                .password(encoder.encode("Faculty@Reg2024!"))
-                .roles("FACULTY")
-                .build();
-        UserDetails reviewer = User.withUsername("reviewer")
-                .password(encoder.encode("Review@Reg2024!"))
-                .roles("REVIEWER")
-                .build();
-        UserDetails student = User.withUsername("student")
-                .password(encoder.encode("Student@Reg24!"))
-                .roles("STUDENT")
-                .build();
-        return new InMemoryUserDetailsManager(admin, faculty, reviewer, student);
+    public DaoAuthenticationProvider daoAuthenticationProvider(CustomUserDetailsService userDetailsService,
+                                                               PasswordEncoder passwordEncoder) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration cfg) throws Exception {
+        return cfg.getAuthenticationManager();
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   AuthEventHandlers handlers) throws Exception {
         http
-            // CSRF: enabled for all form POSTs. Token persisted in cookie so HTMX
-            // can read it from <meta> tag and resend on every request.
+            // CSRF: enabled on every form post. CookieCsrfTokenRepository.withHttpOnlyFalse
+            // lets the HTMX layer read the token from the meta tag and forward it.
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .ignoringRequestMatchers("/api/v1/**"))
@@ -67,18 +68,19 @@ public class SecurityConfig {
                 .requestMatchers("/evaluations/**").hasAnyRole("FACULTY", "REVIEWER", "ADMIN")
                 .requestMatchers("/catalog/**").hasAnyRole("STUDENT", "ADMIN")
                 .requestMatchers("/orders/**").hasAnyRole("STUDENT", "ADMIN")
+                .requestMatchers("/api/notifications/**").authenticated()
                 .anyRequest().authenticated())
             .formLogin(form -> form
                 .loginPage("/login")
                 .loginProcessingUrl("/login")
-                .defaultSuccessUrl("/", true)
-                .failureUrl("/login?error")
+                .successHandler(handlers.successHandler())
+                .failureHandler(handlers.failureHandler())
                 .permitAll())
             .logout(logout -> logout
                 .logoutUrl("/logout")
                 .logoutSuccessUrl("/login?logout")
                 .invalidateHttpSession(true)
-                .deleteCookies("JSESSIONID")
+                .deleteCookies("JSESSIONID", "XSRF-TOKEN")
                 .permitAll())
             .sessionManagement(sm -> sm.maximumSessions(1));
         return http.build();
