@@ -211,28 +211,28 @@
 > Goal: Both test suites pass in Docker, static audit clean, end-to-end QA scenario verified
 > Complete all tasks continuously, then pause. Wait for "proceed".
 
-- [ ] 8.1 Audit: grep -r "createNativeQuery\|createQuery.*\"SELECT\|EntityManager" src/main/java/ → must return zero (use JPA repositories + @Query JPQL only)
-- [ ] 8.2 Audit: grep -n "update\|delete" src/main/java/com/registrarops/repository/AuditLogRepository.java → must return zero methods with those names
-- [ ] 8.3 Audit: grep -r "System.out.println\|e.printStackTrace" src/main/java/ → must be zero (use SLF4J logger only)
-- [ ] 8.4 Audit: every @Controller POST method — verify th:action uses @{} (which auto-includes CSRF token via Thymeleaf Spring Security integration)
-- [ ] 8.5 Audit: every @Service method that modifies data — verify auditService.log() is called. Add any missing calls.
-- [ ] 8.6 Write final missing tests to ensure complete coverage of all 4 QA paths:
+- [x] 8.1 Audit: grep -r "createNativeQuery\|createQuery.*\"SELECT\|EntityManager" src/main/java/ → must return zero (use JPA repositories + @Query JPQL only)
+- [x] 8.2 Audit: grep -n "update\|delete" src/main/java/com/registrarops/repository/AuditLogRepository.java → must return zero methods with those names
+- [x] 8.3 Audit: grep -r "System.out.println\|e.printStackTrace" src/main/java/ → must be zero (use SLF4J logger only)
+- [x] 8.4 Audit: every @Controller POST method — verify th:action uses @{} (which auto-includes CSRF token via Thymeleaf Spring Security integration)
+- [x] 8.5 Audit: every @Service method that modifies data — verify auditService.log() is called. Add any missing calls.
+- [x] 8.6 Write final missing tests to ensure complete coverage of all 4 QA paths:
        Security: testCsrfMissingOnPostReturns403(), testLockedAccountRedirects(), testRoleBasedUrlAccess_StudentCannotAccessAdmin()
        Business: testGpaScaleBoundaries(), testOrderStateTransitionAll(), testEvidenceFileSizeValidation(), testRetryQueueExponentialBackoff()
        Privacy: testSensitiveFieldsMaskedInAuditLog(), testAccountDeletionSoftDelete()
-- [ ] 8.7 Create AbstractIntegrationTest.java with @Testcontainers + @SpringBootTest(webEnvironment=RANDOM_PORT): start MySQL Testcontainer, @DynamicPropertySource to override datasource URL, shared across all api/ test classes.
-- [ ] 8.8 Run: docker compose --profile test run --build test → fix ALL failures until output shows:
+- [x] 8.7 Create AbstractIntegrationTest.java with @Testcontainers + @SpringBootTest(webEnvironment=RANDOM_PORT): start MySQL Testcontainer, @DynamicPropertySource to override datasource URL, shared across all api/ test classes.
+- [x] 8.8 Run: docker compose --profile test run --build test → fix ALL failures until output shows:
        ✅ Unit Tests PASSED
        ✅ API Tests PASSED
        ALL TESTS PASSED
        Exit code 0
-- [ ] 8.9 Run: docker compose up --build → full end-to-end scenario:
+- [x] 8.9 Run: docker compose up --build → full end-to-end scenario:
        Login as admin → manage users → view audit log (immutable badge visible)
        Login as faculty → enter grades → open evaluation cycle → upload evidence → submit
        Login as reviewer → see submitted cycle → outlier highlighted → approve
        Login as student → search catalog (HTMX suggestions work) → create order → see 30-min countdown → complete payment → see timeline → submit messages notification visible
        Verify: notification bell updates count → messages center shows notifications → quiet hours preference saves
-- [ ] 8.10 Final checks: grep -r "TODO\|FIXME\|placeholder\|stub" src/main/java/ src/main/resources/templates/ | grep -v "test\|\.md" → must be zero
+- [x] 8.10 Final checks: grep -r "TODO\|FIXME\|placeholder\|stub" src/main/java/ src/main/resources/templates/ | grep -v "test\|\.md" → must be zero
 
 **Phase 8 checkpoint: docker compose --profile test run test → ALL TESTS PASSED exit 0. Full end-to-end scenario passes for all 4 roles.**
 

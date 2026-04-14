@@ -11,18 +11,23 @@ echo "========================================"
 UNIT_FAILED=0
 API_FAILED=0
 
+UNIT_LOG=$(mktemp)
+API_LOG=$(mktemp)
+
 echo ""
 echo "--- Unit Tests (src/test/java/.../unit/) ---"
-./mvnw test -Dtest="com.registrarops.unit.*" \
+./mvnw test -Dtest='com.registrarops.unit.**' -DfailIfNoTests=false \
   --no-transfer-progress \
-  -Dspring.profiles.active=test 2>&1 || UNIT_FAILED=1
+  -Dspring.profiles.active=test 2>&1 | tee "$UNIT_LOG" || UNIT_FAILED=1
+grep -E "^\[INFO\] Tests run.*Failures" "$UNIT_LOG" | tail -1
 [ $UNIT_FAILED -eq 0 ] && echo "Unit Tests PASSED" || echo "Unit Tests FAILED"
 
 echo ""
 echo "--- API / Integration Tests (src/test/java/.../api/) ---"
-./mvnw test -Dtest="com.registrarops.api.*" \
+./mvnw test -Dtest='com.registrarops.api.**' -DfailIfNoTests=false \
   --no-transfer-progress \
-  -Dspring.profiles.active=test 2>&1 || API_FAILED=1
+  -Dspring.profiles.active=test 2>&1 | tee "$API_LOG" || API_FAILED=1
+grep -E "^\[INFO\] Tests run.*Failures" "$API_LOG" | tail -1
 [ $API_FAILED -eq 0 ] && echo "API Tests PASSED" || echo "API Tests FAILED"
 
 echo ""
