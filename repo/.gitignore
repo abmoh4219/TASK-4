@@ -1,0 +1,9 @@
+target/
+.env
+*.log
+mysql-data/
+uploads/
+.DS_Store
+.idea/
+*.iml
+.mvn/wrapper/dists/

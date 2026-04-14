@@ -1,0 +1,69 @@
+services:
+  setup:
+    image: alpine:3.18
+    volumes:
+      - ./:/workspace
+    command: >
+      sh -c "if [ ! -f /workspace/.env ]; then cp /workspace/.env.example /workspace/.env && echo 'Created .env from .env.example'; else echo '.env already exists'; fi"
+    restart: "no"
+
+  mysql:
+    image: mysql:8.0
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-registrarops}
+      MYSQL_USER: ${MYSQL_USER:-registrar}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-registrar_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pass}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_pass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-registrarops}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-registrar}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-registrar_pass}
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["sh", "run_tests.sh"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+volumes:
+  mysql-data:

@@ -1,0 +1,7 @@
+# Empty by design — Testcontainers @DynamicPropertySource configures datasource at test runtime.
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate

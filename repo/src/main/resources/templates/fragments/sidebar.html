@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security6">
+<body>
+<aside th:fragment="sidebar" class="ro-sidebar">
+  <div class="ro-brand">
+    <span class="ro-logo">◆</span>
+    <span class="ro-brand-name">RegistrarOps</span>
+  </div>
+
+  <div class="ro-nav-section">Workspace</div>
+  <nav class="ro-nav">
+    <a sec:authorize="isAuthenticated()"
+       class="ro-nav-item" th:href="@{/}">Dashboard</a>
+
+    <a sec:authorize="hasAnyRole('STUDENT','ADMIN')"
+       class="ro-nav-item" th:href="@{/catalog}">Catalog</a>
+
+    <a sec:authorize="hasAnyRole('STUDENT','ADMIN')"
+       class="ro-nav-item" th:href="@{/orders}">Orders</a>
+
+    <a sec:authorize="hasAnyRole('FACULTY','ADMIN','STUDENT')"
+       class="ro-nav-item" th:href="@{/grades}">Grades</a>
+
+    <a sec:authorize="hasAnyRole('FACULTY','REVIEWER','ADMIN')"
+       class="ro-nav-item" th:href="@{/evaluations}">Evaluations</a>
+
+    <a sec:authorize="isAuthenticated()"
+       class="ro-nav-item" th:href="@{/messages}">Messages</a>
+  </nav>
+
+  <div sec:authorize="hasRole('ADMIN')">
+    <div class="ro-nav-section">Administration</div>
+    <nav class="ro-nav">
+      <a class="ro-nav-item" th:href="@{/admin/users}">Users</a>
+      <a class="ro-nav-item" th:href="@{/admin/import}">Import</a>
+      <a class="ro-nav-item" th:href="@{/admin/audit}">Audit Log</a>
+      <a class="ro-nav-item" th:href="@{/admin/config}">System Config</a>
+    </nav>
+  </div>
+</aside>
+</body>
+</html>

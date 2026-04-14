@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security6">
+<body>
+<header th:fragment="topbar(title)" class="ro-topbar">
+  <div class="ro-breadcrumb">
+    <span>Workspace</span> / <strong th:text="${title}">Page</strong>
+  </div>
+  <div class="ro-topbar-right">
+    <span class="ro-notif-bell"
+          title="Notifications"
+          hx-get="/api/notifications/count"
+          hx-trigger="load, every 30s"
+          hx-swap="innerHTML">
+      &#9737;
+    </span>
+    <span sec:authorize="isAuthenticated()" class="ro-user">
+      <span sec:authentication="name" class="me-2">user</span>
+      <span sec:authorize="hasRole('ADMIN')"    class="ro-role-badge ro-role-admin">Admin</span>
+      <span sec:authorize="hasRole('FACULTY')"  class="ro-role-badge ro-role-faculty">Faculty</span>
+      <span sec:authorize="hasRole('REVIEWER')" class="ro-role-badge ro-role-reviewer">Reviewer</span>
+      <span sec:authorize="hasRole('STUDENT')"  class="ro-role-badge ro-role-student">Student</span>
+    </span>
+    <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post" class="d-inline m-0">
+      <button type="submit" class="btn btn-sm btn-outline-light">Sign out</button>
+    </form>
+  </div>
+</header>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security6">
+<body>
+<div th:replace="~{layout/base :: layout('Dashboard', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <h1 class="h3 mb-2">Welcome to RegistrarOps</h1>
+      <p style="color: var(--text-secondary);">
+        Signed in as <strong sec:authentication="name">user</strong>.
+      </p>
+      <p style="color: var(--text-muted);">
+        Phase 0 scaffold is live. Subsequent phases will populate dashboards with real data.
+      </p>
+    </div>
+  </section>
+</div>
+</body>
+</html>

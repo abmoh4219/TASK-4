@@ -1,0 +1,11 @@
+FROM maven:3.9.6-eclipse-temurin-17-alpine
+WORKDIR /app
+RUN apk add --no-cache docker-cli
+COPY pom.xml ./
+COPY .mvn/ .mvn/
+COPY mvnw ./
+RUN chmod +x mvnw && mvn -B -q dependency:go-offline
+COPY src/ src/
+COPY run_tests.sh ./
+RUN chmod +x run_tests.sh
+CMD ["sh", "run_tests.sh"]
