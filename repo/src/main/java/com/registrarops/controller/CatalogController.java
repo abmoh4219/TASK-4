@@ -35,18 +35,25 @@ public class CatalogController {
                         @RequestParam(value = "minPrice", required = false) BigDecimal minPrice,
                         @RequestParam(value = "maxPrice", required = false) BigDecimal maxPrice,
                         @RequestParam(value = "newArrivals", required = false, defaultValue = "false") boolean newArrivals,
+                        @RequestParam(value = "tag", required = false) String tag,
+                        @RequestParam(value = "author", required = false) String author,
+                        @RequestParam(value = "minRating", required = false) BigDecimal minRating,
                         @RequestParam(value = "sort", required = false) CatalogService.Sort sort,
                         Model model) {
         if (query != null && !query.isBlank()) {
             searchService.recordSearch(query);
         }
-        var results = catalogService.search(query, category, minPrice, maxPrice, newArrivals, sort);
+        var results = catalogService.search(query, category, minPrice, maxPrice, newArrivals,
+                tag, author, minRating, sort);
         model.addAttribute("results", results);
         model.addAttribute("query", query == null ? "" : query);
         model.addAttribute("category", category);
         model.addAttribute("minPrice", minPrice);
         model.addAttribute("maxPrice", maxPrice);
         model.addAttribute("newArrivals", newArrivals);
+        model.addAttribute("tag", tag);
+        model.addAttribute("author", author);
+        model.addAttribute("minRating", minRating);
         model.addAttribute("sort", sort);
         model.addAttribute("trending", catalogService.getTrending());
         if (results.isEmpty()) {

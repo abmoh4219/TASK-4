@@ -34,6 +34,13 @@ server:
   error:
     include-message: always
 
+registrarops:
+  orders:
+    # Business policy — change here (or via env) without redeploying code.
+    payment-timeout-minutes: 30
+    refund-window-days: 14
+    idempotency-window-minutes: 10
+
 logging:
   level:
     root: INFO

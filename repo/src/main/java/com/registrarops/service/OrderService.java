@@ -9,7 +9,9 @@ import com.registrarops.repository.OrderItemRepository;
 import com.registrarops.repository.OrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,9 +59,38 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
-    public static final int PAYMENT_TIMEOUT_MINUTES = 30;
-    public static final int REFUND_WINDOW_DAYS = 14;
-    public static final long IDEMPOTENCY_WINDOW_MINUTES = 10;
+    // Defaults preserve prior hardcoded behaviour. Every value is overridable
+    // via application.yml / env vars under the `registrarops.orders.*` prefix
+    // so the refund / payment / idempotency policy can change without a code
+    // change. The `public static final` legacy constants are kept for any
+    // caller that still references them but are no longer authoritative.
+    public static final int PAYMENT_TIMEOUT_MINUTES_DEFAULT = 30;
+    public static final int REFUND_WINDOW_DAYS_DEFAULT = 14;
+    public static final long IDEMPOTENCY_WINDOW_MINUTES_DEFAULT = 10;
+
+    /** @deprecated use {@link #getPaymentTimeoutMinutes()} — configurable at runtime. */
+    @Deprecated
+    public static final int PAYMENT_TIMEOUT_MINUTES = PAYMENT_TIMEOUT_MINUTES_DEFAULT;
+    /** @deprecated use injected {@code refundWindowDays}. */
+    @Deprecated
+    public static final int REFUND_WINDOW_DAYS = REFUND_WINDOW_DAYS_DEFAULT;
+    /** @deprecated use injected {@code idempotencyWindowMinutes}. */
+    @Deprecated
+    public static final long IDEMPOTENCY_WINDOW_MINUTES = IDEMPOTENCY_WINDOW_MINUTES_DEFAULT;
+
+    // Field initializers provide the defaults so plain-Java unit tests that
+    // instantiate OrderService without Spring still see sensible values. The
+    // @Value annotations override them when the bean is managed by Spring.
+    @Value("${registrarops.orders.payment-timeout-minutes:30}")
+    private int paymentTimeoutMinutes = PAYMENT_TIMEOUT_MINUTES_DEFAULT;
+    @Value("${registrarops.orders.refund-window-days:14}")
+    private int refundWindowDays = REFUND_WINDOW_DAYS_DEFAULT;
+    @Value("${registrarops.orders.idempotency-window-minutes:10}")
+    private long idempotencyWindowMinutes = IDEMPOTENCY_WINDOW_MINUTES_DEFAULT;
+
+    public int getPaymentTimeoutMinutes() { return paymentTimeoutMinutes; }
+    public int getRefundWindowDays()      { return refundWindowDays; }
+    public long getIdempotencyWindowMinutes() { return idempotencyWindowMinutes; }
 
     private static final Map<OrderStatus, EnumSet<OrderStatus>> ALLOWED;
     static {
@@ -102,7 +133,7 @@ public class OrderService {
         Optional<Order> existing = orderRepository.findByCorrelationId(correlationId);
         if (existing.isPresent()) {
             Order prior = existing.get();
-            if (Duration.between(prior.getCreatedAt(), LocalDateTime.now()).toMinutes() <= IDEMPOTENCY_WINDOW_MINUTES) {
+            if (Duration.between(prior.getCreatedAt(), LocalDateTime.now()).toMinutes() <= idempotencyWindowMinutes) {
                 log.info("idempotent createOrder: returning existing order {} for correlationId {}",
                         prior.getId(), correlationId);
                 return prior;
@@ -163,6 +194,7 @@ public class OrderService {
     @Transactional
     public Order completePayment(Long orderId, Long actorId) {
         Order order = mustFind(orderId);
+        enforceOwnership(order, actorId);
         transition(order, OrderStatus.PAID);
         order.setPaidAt(LocalDateTime.now());
         orderRepository.save(order);
@@ -178,6 +210,7 @@ public class OrderService {
     @Transactional
     public Order cancelOrder(Long orderId, Long actorId, String reason) {
         Order order = mustFind(orderId);
+        enforceOwnership(order, actorId);
         transition(order, OrderStatus.CANCELED);
         order.setCanceledAt(LocalDateTime.now());
         order.setCancelReason(reason);
@@ -198,6 +231,7 @@ public class OrderService {
     @Transactional
     public Order refundOrder(Long orderId, Long actorId) {
         Order order = mustFind(orderId);
+        enforceOwnership(order, actorId);
         if (order.getStatus() != OrderStatus.PAID) {
             throw new OrderStateException(order.getStatus(), OrderStatus.REFUNDED);
         }
@@ -220,7 +254,7 @@ public class OrderService {
     public boolean isRefundAllowed(Order order) {
         if (order.getStatus() != OrderStatus.PAID || order.getPaidAt() == null) return false;
         if (Boolean.TRUE.equals(order.getExceptionStatus())) return true;
-        return Duration.between(order.getPaidAt(), LocalDateTime.now()).toDays() < REFUND_WINDOW_DAYS;
+        return Duration.between(order.getPaidAt(), LocalDateTime.now()).toDays() < refundWindowDays;
     }
 
     /**
@@ -230,7 +264,7 @@ public class OrderService {
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void cancelExpiredOrders() {
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(PAYMENT_TIMEOUT_MINUTES);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(paymentTimeoutMinutes);
         List<Order> expired = orderRepository.findExpiredByStatus(OrderStatus.PAYING, cutoff);
         for (Order o : expired) {
             try {
@@ -255,6 +289,18 @@ public class OrderService {
     }
 
     // ---- internals ----------------------------------------------------------
+
+    /**
+     * Object-level ownership check. actorId == null means "system" (scheduled
+     * sweeper or admin override via the controller). A non-null actor must match
+     * the order's studentId, otherwise deny.
+     */
+    private void enforceOwnership(Order order, Long actorId) {
+        if (actorId == null) return;
+        if (!actorId.equals(order.getStudentId())) {
+            throw new AccessDeniedException("Actor " + actorId + " does not own order " + order.getId());
+        }
+    }
 
     private Order mustFind(Long id) {
         return orderRepository.findById(id)

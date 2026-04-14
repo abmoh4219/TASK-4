@@ -58,6 +58,25 @@ public class CatalogService {
                                BigDecimal maxPrice,
                                boolean newArrivalsOnly,
                                Sort sort) {
+        return search(query, category, minPrice, maxPrice, newArrivalsOnly, null, null, null, sort);
+    }
+
+    /**
+     * Full filter form including the prompt-required tag/author/rating dimensions.
+     * The repository query still handles the common fast-path filters; the
+     * tag/author/rating dimensions are applied in-memory on the already-narrowed
+     * result set (the dataset is small and rendered server-side, so this is safe
+     * and avoids invasive changes to the JPQL filter query).
+     */
+    public List<Course> search(String query,
+                               String category,
+                               BigDecimal minPrice,
+                               BigDecimal maxPrice,
+                               boolean newArrivalsOnly,
+                               String tag,
+                               String author,
+                               BigDecimal minRating,
+                               Sort sort) {
         LocalDateTime newSince = newArrivalsOnly
                 ? LocalDateTime.now().minusDays(NEW_ARRIVAL_DAYS)
                 : null;
@@ -66,7 +85,6 @@ public class CatalogService {
         if (query != null && !query.isBlank()) {
             String norm = searchService.normalize(query);
             base = courseRepository.searchByTerm(norm);
-            // Intersect with structured filters in-memory (small dataset, server-side render).
             base = base.stream()
                     .filter(c -> category == null || category.isBlank() || category.equalsIgnoreCase(c.getCategory()))
                     .filter(c -> minPrice == null || c.getPrice().compareTo(minPrice) >= 0)
@@ -77,7 +95,19 @@ public class CatalogService {
             base = courseRepository.filter(blankToNull(category), minPrice, maxPrice, newSince);
         }
 
-        return applySort(base, sort);
+        // Additional prompt-defined filter dimensions (tag/author/rating).
+        String tagNorm = blankToNull(tag);
+        String authorNorm = blankToNull(author);
+        List<Course> filtered = base.stream()
+                .filter(c -> tagNorm == null || (c.getTags() != null
+                        && c.getTags().toLowerCase().contains(tagNorm.toLowerCase())))
+                .filter(c -> authorNorm == null || (c.getAuthorName() != null
+                        && c.getAuthorName().toLowerCase().contains(authorNorm.toLowerCase())))
+                .filter(c -> minRating == null || (c.getRatingAvg() != null
+                        && c.getRatingAvg().compareTo(minRating) >= 0))
+                .toList();
+
+        return applySort(filtered, sort);
     }
 
     public Optional<Course> getCourse(Long id) {

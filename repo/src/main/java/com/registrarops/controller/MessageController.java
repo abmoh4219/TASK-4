@@ -57,6 +57,11 @@ public class MessageController {
                              @RequestParam int startHour,
                              @RequestParam int endHour,
                              RedirectAttributes redirect) {
+        if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "quiet hours must be in [0,23]");
+        }
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
         messageService.updateQuietHours(user.getId(), startHour, endHour);
         redirect.addFlashAttribute("flashSuccess", "Quiet hours updated.");

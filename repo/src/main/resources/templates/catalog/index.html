@@ -55,6 +55,27 @@
               <label class="form-check-label" for="newArrivals">New arrivals only</label>
             </div>
             <div class="mb-3">
+              <label class="form-label">Tag</label>
+              <input type="text" name="tag" class="form-control" placeholder="e.g. algebra"
+                     th:value="${tag}"/>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Author</label>
+              <input type="text" name="author" class="form-control" placeholder="Author name"
+                     th:value="${author}"/>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Min rating</label>
+              <select name="minRating" class="form-select">
+                <option value="">Any</option>
+                <option value="1" th:selected="${minRating != null and minRating.toString() == '1'}">1★+</option>
+                <option value="2" th:selected="${minRating != null and minRating.toString() == '2'}">2★+</option>
+                <option value="3" th:selected="${minRating != null and minRating.toString() == '3'}">3★+</option>
+                <option value="4" th:selected="${minRating != null and minRating.toString() == '4'}">4★+</option>
+                <option value="5" th:selected="${minRating != null and minRating.toString() == '5'}">5★</option>
+              </select>
+            </div>
+            <div class="mb-3">
               <label class="form-label">Sort by</label>
               <select name="sort" class="form-select">
                 <option value="">Default</option>

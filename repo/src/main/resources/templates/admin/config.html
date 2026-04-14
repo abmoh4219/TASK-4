@@ -5,16 +5,34 @@
   <section>
     <div class="ro-card">
       <h1 class="h4 mb-3">System config</h1>
+      <h2 class="h6">Fixed rules</h2>
       <table class="table">
         <tbody>
           <tr><th>GPA scale</th><td>90→4.0 · 85→3.7 · 80→3.3 · 75→3.0 · 70→2.7 · 60→2.0 · &lt;60→0.0</td></tr>
-          <tr><th>Refund window</th><td>14 days from payment unless exception_status=true</td></tr>
-          <tr><th>Order auto-cancel</th><td>30 minutes after CREATED</td></tr>
           <tr><th>Lockout policy</th><td>5 failed attempts within 15 minutes</td></tr>
-          <tr><th>Quiet hours (default)</th><td>22:00 – 07:00 local</td></tr>
           <tr><th>Evidence file size cap</th><td>10 MB · PDF/JPG/PNG/DOCX only</td></tr>
-          <tr><th>Retry queue backoff</th><td>2^N × 60 seconds, max 3 attempts</td></tr>
           <tr><th>Server time</th><td th:text="${now}">now</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="h6 mt-4">Policy settings (persisted)</h2>
+      <p class="text-muted small">Updates are audited as POLICY_UPDATED events.</p>
+      <table class="table table-sm">
+        <thead><tr><th>Key</th><th>Value</th><th>Updated at</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="s : ${settings}">
+            <td th:text="${s.key}">key</td>
+            <td th:text="${s.value}">value</td>
+            <td th:text="${s.updatedAt}">when</td>
+            <td>
+              <form th:action="@{/admin/config}" method="post" class="d-flex gap-2">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                <input type="hidden" name="key" th:value="${s.key}"/>
+                <input type="text" name="value" th:value="${s.value}" class="form-control form-control-sm"/>
+                <button type="submit" class="btn btn-sm btn-outline-light">Save</button>
+              </form>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

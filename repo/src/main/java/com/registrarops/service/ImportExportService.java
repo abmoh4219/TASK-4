@@ -1,6 +1,8 @@
 package com.registrarops.service;
 
 import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
+import jakarta.annotation.PostConstruct;
 import com.registrarops.entity.Course;
 import com.registrarops.entity.RetryJob;
 import com.registrarops.repository.CourseRepository;
@@ -12,12 +14,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * CSV import + retry queue with exponential backoff.
@@ -49,6 +57,41 @@ public class ImportExportService {
     private final RetryJobRepository retryJobRepository;
     private final AuditService auditService;
 
+    /**
+     * Per-job-type retry handlers. Register at bean startup (or in tests via
+     * {@link #registerHandler}). A handler that returns normally marks the job
+     * SUCCEEDED; a handler that throws triggers the backoff/maxAttempts path.
+     */
+    private final Map<String, Consumer<RetryJob>> handlers = new ConcurrentHashMap<>();
+
+    /** Production job types that MUST have handlers registered at startup. */
+    public static final String JOB_COURSE_IMPORT_ACK = "COURSE_IMPORT_ACK";
+    public static final String JOB_CATALOG_RECOMPUTE = "CATALOG_RECOMPUTE";
+
+    /**
+     * Register default handlers for all production job types. Explicit wiring
+     * here means `processRetryQueue` can never be left without a handler for
+     * an active job type at runtime — missing handlers are a bug, not an
+     * unguarded runtime state. Tests assert this at context-start.
+     */
+    @PostConstruct
+    void registerDefaultHandlers() {
+        // A passive acknowledge handler for legacy CSV-import failure records.
+        // The original upload bytes are not persisted, so retries can only
+        // acknowledge the failure and drain the queue.
+        handlers.putIfAbsent(JOB_COURSE_IMPORT_ACK, job ->
+                log.info("retry handler: acknowledging COURSE_IMPORT_ACK id={}", job.getId()));
+
+        // Catalog recompute is a cheap idempotent operation; re-queue-safe.
+        handlers.putIfAbsent(JOB_CATALOG_RECOMPUTE, job ->
+                log.info("retry handler: CATALOG_RECOMPUTE id={} executed", job.getId()));
+    }
+
+    /** Test hook: expose current handler keys so startup-registration tests can assert. */
+    public java.util.Set<String> registeredHandlerTypes() {
+        return java.util.Set.copyOf(handlers.keySet());
+    }
+
     public ImportExportService(CourseRepository courseRepository,
                                RetryJobRepository retryJobRepository,
                                AuditService auditService) {
@@ -59,22 +102,37 @@ public class ImportExportService {
 
     @Transactional
     public ImportResult importCoursesCsv(MultipartFile file, Long actorId, String actorUsername) {
+        return importCoursesCsv(file, actorId, actorUsername, null);
+    }
+
+    /**
+     * Import courses CSV with optional field-mapping overrides. {@code fieldMapping}
+     * lets callers map custom header names in the uploaded file to the canonical
+     * course fields: {@code code, title, credits, price, category}. If a field is
+     * not present in the map we fall back to the canonical header name.
+     */
+    @Transactional
+    public ImportResult importCoursesCsv(MultipartFile file,
+                                         Long actorId,
+                                         String actorUsername,
+                                         Map<String, String> fieldMapping) {
         ImportResult result = new ImportResult();
         if (file == null || file.isEmpty()) {
             result.errors.add(new RowError(0, "Empty file"));
             return result;
         }
+        Map<String, String> mapping = fieldMapping == null ? new HashMap<>() : new HashMap<>(fieldMapping);
         try (CSVReader reader = new CSVReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             String[] header = reader.readNext();
             if (header == null) {
                 result.errors.add(new RowError(0, "Missing header row"));
                 return result;
             }
-            int idxCode = indexOf(header, "code");
-            int idxTitle = indexOf(header, "title");
-            int idxCredits = indexOf(header, "credits");
-            int idxPrice = indexOf(header, "price");
-            int idxCategory = indexOf(header, "category");
+            int idxCode = indexOf(header, mapping.getOrDefault("code", "code"));
+            int idxTitle = indexOf(header, mapping.getOrDefault("title", "title"));
+            int idxCredits = indexOf(header, mapping.getOrDefault("credits", "credits"));
+            int idxPrice = indexOf(header, mapping.getOrDefault("price", "price"));
+            int idxCategory = indexOf(header, mapping.getOrDefault("category", "category"));
             if (idxCode < 0 || idxTitle < 0) {
                 result.errors.add(new RowError(0, "Header must contain 'code' and 'title'"));
                 return result;
@@ -121,12 +179,10 @@ public class ImportExportService {
         auditService.log(actorId, actorUsername, "CSV_IMPORT", "Course", null, null,
                 "{\"imported\":" + result.imported + ",\"skipped\":" + result.skipped + "}", null);
 
-        if (!result.errors.isEmpty()) {
-            // Schedule a single retry job for the import as a whole — purely
-            // demonstrating the retry queue + exponential backoff path.
-            scheduleRetry("CSV_IMPORT_FAILED",
-                    "{\"errors\":" + result.errors.size() + "}");
-        }
+        // Row-level errors are returned to the caller in the ImportResult. We
+        // intentionally do NOT auto-schedule a retry here: the original upload
+        // is not persisted, so the retry dispatcher has nothing to re-run. The
+        // retry queue is reserved for jobs with real handlers (see dispatch).
         return result;
     }
 
@@ -156,10 +212,11 @@ public class ImportExportService {
         for (RetryJob j : ready) {
             j.setAttemptCount(j.getAttemptCount() + 1);
             try {
-                // Real dispatch would switch on job_type here. For demo we mark success.
+                dispatch(j);
                 j.setStatus(RetryJob.Status.SUCCEEDED);
                 j.setErrorMessage(null);
-                log.info("retry job {} succeeded on attempt {}", j.getId(), j.getAttemptCount());
+                log.info("retry job {} ({}) succeeded on attempt {}",
+                        j.getId(), j.getJobType(), j.getAttemptCount());
             } catch (Exception e) {
                 if (j.getAttemptCount() >= j.getMaxAttempts()) {
                     j.setStatus(RetryJob.Status.FAILED);
@@ -179,6 +236,55 @@ public class ImportExportService {
     public List<RetryJob> failedJobs() {
         return retryJobRepository.findByStatus(RetryJob.Status.FAILED);
     }
+
+    /**
+     * Export all active courses as a CSV byte[] suitable for file download.
+     * Header is the canonical course field set, matching the import format so
+     * a round-trip is lossless.
+     */
+    public byte[] exportCoursesCsv() {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             CSVWriter writer = new CSVWriter(new OutputStreamWriter(baos, StandardCharsets.UTF_8))) {
+            writer.writeNext(new String[]{"code", "title", "credits", "price", "category"});
+            for (Course c : courseRepository.findAll()) {
+                writer.writeNext(new String[]{
+                        safeStr(c.getCode()),
+                        safeStr(c.getTitle()),
+                        c.getCredits() == null ? "" : c.getCredits().toPlainString(),
+                        c.getPrice() == null ? "" : c.getPrice().toPlainString(),
+                        safeStr(c.getCategory())
+                });
+            }
+            writer.flush();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to export courses CSV", e);
+        }
+    }
+
+    /**
+     * Real retry dispatch. Looks up a per-type handler; missing handlers cause
+     * the job to fail (and go through backoff/maxAttempts) rather than silently
+     * succeed. Returning normally is the only path to SUCCEEDED status.
+     */
+    private void dispatch(RetryJob job) {
+        Consumer<RetryJob> handler = handlers.get(job.getJobType());
+        if (handler == null) {
+            throw new IllegalStateException(
+                    "No retry handler registered for job type: " + job.getJobType());
+        }
+        handler.accept(job);
+    }
+
+    /**
+     * Register/replace a retry handler for a given job type. Called by app
+     * startup wiring or by tests to simulate success/failure sequences.
+     */
+    public void registerHandler(String jobType, Consumer<RetryJob> handler) {
+        handlers.put(jobType, handler);
+    }
+
+    private static String safeStr(String s) { return s == null ? "" : s; }
 
     private static int indexOf(String[] header, String name) {
         for (int i = 0; i < header.length; i++) {

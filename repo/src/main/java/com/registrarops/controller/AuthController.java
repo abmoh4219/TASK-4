@@ -49,6 +49,19 @@ public class AuthController {
         return "auth/profile";
     }
 
+    @PostMapping("/profile/device-binding")
+    public String updateDeviceBinding(@AuthenticationPrincipal UserDetails principal,
+                                      @org.springframework.web.bind.annotation.RequestParam(value = "enabled", defaultValue = "false") boolean enabled,
+                                      RedirectAttributes redirect) {
+        User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
+        user.setDeviceBindingEnabled(enabled);
+        userRepository.save(user);
+        redirect.addFlashAttribute("flashSuccess",
+                enabled ? "Device binding enabled — you'll see an in-app notice on new sign-in devices."
+                        : "Device binding disabled.");
+        return "redirect:/profile";
+    }
+
     @GetMapping("/account/delete")
     public String confirmDelete() {
         return "auth/delete";
@@ -60,30 +73,42 @@ public class AuthController {
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
         String token = accountDeletionService.exportAndSoftDelete(user.getId());
         redirect.addFlashAttribute("flashSuccess",
-                "Account deleted. Download your data archive within 7 days using the link in your email queue.");
+                "Account deleted. Your data archive is available for in-app download for 7 days using the link below.");
         return "redirect:/account/export/" + token;
     }
 
     /**
-     * Download the local export file. Token is embedded in the filename
-     * (user_{id}_{token}.json) so we look it up via the user record's stored path.
+     * Download the local export file. The token is bound to the authenticated
+     * principal: we load ONLY the current user's export-file record and compare
+     * the token from the filename with exact equality. No cross-user scan.
      */
     @GetMapping("/account/export/{token}")
-    public ResponseEntity<?> downloadExport(@PathVariable String token) {
-        return userRepository.findAll().stream()
-                .filter(u -> u.getExportFilePath() != null && u.getExportFilePath().contains(token))
-                .findFirst()
-                .map(u -> {
-                    Path file = Paths.get(u.getExportFilePath());
-                    if (!file.toFile().exists()) {
-                        return ResponseEntity.notFound().build();
-                    }
-                    return ResponseEntity.ok()
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .header(HttpHeaders.CONTENT_DISPOSITION,
-                                    "attachment; filename=\"" + file.getFileName() + "\"")
-                            .body((Object) new FileSystemResource(file));
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> downloadExport(@AuthenticationPrincipal UserDetails principal,
+                                            @PathVariable String token) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        User user = userRepository.findByUsername(principal.getUsername()).orElse(null);
+        if (user == null || user.getExportFilePath() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Path file = Paths.get(user.getExportFilePath());
+        String expectedToken = extractToken(file.getFileName().toString(), user.getId());
+        if (expectedToken == null || !expectedToken.equals(token)) {
+            return ResponseEntity.status(403).build();
+        }
+        if (!file.toFile().exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + file.getFileName() + "\"")
+                .body(new FileSystemResource(file));
+    }
+
+    /** Parse "user_{id}_{token}.json" → {token}, returning null on mismatch. */
+    private static String extractToken(String filename, Long userId) {
+        String prefix = "user_" + userId + "_";
+        if (filename == null || !filename.startsWith(prefix) || !filename.endsWith(".json")) return null;
+        return filename.substring(prefix.length(), filename.length() - ".json".length());
     }
 }

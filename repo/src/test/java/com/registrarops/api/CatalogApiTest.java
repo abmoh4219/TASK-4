@@ -35,6 +35,40 @@ class CatalogApiTest extends AbstractIntegrationTest {
 
     @Test
     @WithMockUser(username = "student", roles = "STUDENT")
+    void testFilterByMinRatingHighExcludesAll() throws Exception {
+        // Seed ratings top out at 4.80 — 5.00 must filter everything out.
+        mockMvc.perform(get("/catalog").param("minRating", "5.00"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("No matches")));
+    }
+
+    @Test
+    @WithMockUser(username = "student", roles = "STUDENT")
+    void testFilterByTagKeepsCalculus() throws Exception {
+        // Seed: MATH201 has tag "calculus,integrals,series" → substring match.
+        mockMvc.perform(get("/catalog").param("tag", "calculus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Calculus")));
+    }
+
+    @Test
+    @WithMockUser(username = "student", roles = "STUDENT")
+    void testFilterByAuthorKeepsVance() throws Exception {
+        mockMvc.perform(get("/catalog").param("author", "Vance"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Calculus")));
+    }
+
+    @Test
+    @WithMockUser(username = "student", roles = "STUDENT")
+    void testFilterByTagNoMatch() throws Exception {
+        mockMvc.perform(get("/catalog").param("tag", "qzqzqz-no-such-tag"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("No matches")));
+    }
+
+    @Test
+    @WithMockUser(username = "student", roles = "STUDENT")
     void testFilterByPriceRange() throws Exception {
         // The seed has CS301 priced 49.99 and several free courses; max=10 should hide CS301.
         mockMvc.perform(get("/catalog").param("maxPrice", "10"))

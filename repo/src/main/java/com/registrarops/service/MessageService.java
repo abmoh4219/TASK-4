@@ -151,6 +151,10 @@ public class MessageService {
 
     @Transactional
     public MessagePreference updateQuietHours(Long userId, int startHour, int endHour) {
+        if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
+            throw new IllegalArgumentException(
+                    "quiet hours must be in [0,23]; got start=" + startHour + " end=" + endHour);
+        }
         MessagePreference p = preferenceRepository.findByUserId(userId)
                 .orElseGet(() -> {
                     MessagePreference fresh = new MessagePreference();

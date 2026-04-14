@@ -43,6 +43,10 @@ public class User {
     @Column(name = "export_file_path", length = 500)
     private String exportFilePath;
 
+    /** Opt-in device binding: when false, AuthService skips binding + unusual-login notices. */
+    @Column(name = "device_binding_enabled", nullable = false)
+    private Boolean deviceBindingEnabled = Boolean.FALSE;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

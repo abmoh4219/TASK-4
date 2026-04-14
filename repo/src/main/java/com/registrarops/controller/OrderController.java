@@ -1,6 +1,7 @@
 package com.registrarops.controller;
 
 import com.registrarops.entity.Order;
+import com.registrarops.entity.Role;
 import com.registrarops.entity.User;
 import com.registrarops.repository.UserRepository;
 import com.registrarops.service.CatalogService;
@@ -54,7 +55,7 @@ public class OrderController {
         model.addAttribute("items", orderService.findItems(id));
         // Epoch ms when the 30-min payment window expires (consumed by app.js countdown).
         long expiresAt = order.getCreatedAt()
-                .plusMinutes(OrderService.PAYMENT_TIMEOUT_MINUTES)
+                .plusMinutes(orderService.getPaymentTimeoutMinutes())
                 .toInstant(ZoneOffset.UTC)
                 .toEpochMilli();
         model.addAttribute("expiresAt", expiresAt);
@@ -86,12 +87,17 @@ public class OrderController {
         return "redirect:/orders/" + order.getId();
     }
 
+    /** Admin acts as system/override; students pass their own id for ownership check. */
+    private Long actorFor(User user) {
+        return user.getRole() == Role.ROLE_ADMIN ? null : user.getId();
+    }
+
     @PostMapping("/{id}/pay")
     public String pay(@AuthenticationPrincipal UserDetails principal,
                       @PathVariable Long id,
                       RedirectAttributes redirect) {
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
-        orderService.completePayment(id, user.getId());
+        orderService.completePayment(id, actorFor(user));
         redirect.addFlashAttribute("flashSuccess", "Payment confirmed.");
         return "redirect:/orders/" + id;
     }
@@ -102,7 +108,7 @@ public class OrderController {
                          @RequestParam(value = "reason", required = false) String reason,
                          RedirectAttributes redirect) {
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
-        orderService.cancelOrder(id, user.getId(), reason == null ? "User canceled" : reason);
+        orderService.cancelOrder(id, actorFor(user), reason == null ? "User canceled" : reason);
         redirect.addFlashAttribute("flashSuccess", "Order canceled.");
         return "redirect:/orders/" + id;
     }
@@ -113,7 +119,7 @@ public class OrderController {
                          RedirectAttributes redirect) {
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
         try {
-            orderService.refundOrder(id, user.getId());
+            orderService.refundOrder(id, actorFor(user));
             redirect.addFlashAttribute("flashSuccess", "Order refunded.");
         } catch (Exception e) {
             redirect.addFlashAttribute("flashError", e.getMessage());

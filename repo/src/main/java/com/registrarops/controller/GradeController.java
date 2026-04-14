@@ -3,6 +3,7 @@ package com.registrarops.controller;
 import com.registrarops.entity.*;
 import com.registrarops.repository.*;
 import com.registrarops.service.GradeEngineService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Controller;
@@ -80,6 +81,7 @@ public class GradeController {
     }
 
     @GetMapping("/{courseId}/entry")
+    @PreAuthorize("hasAnyRole('FACULTY','ADMIN')")
     public String entry(@PathVariable Long courseId, Model model) {
         Course course = courseRepository.findById(courseId).orElseThrow();
         List<Enrollment> enrollments = enrollmentRepository.findByCourseId(courseId);
@@ -93,6 +95,7 @@ public class GradeController {
     }
 
     @PostMapping("/{courseId}/components")
+    @PreAuthorize("hasAnyRole('FACULTY','ADMIN')")
     public String addComponent(@AuthenticationPrincipal UserDetails principal,
                                @PathVariable Long courseId,
                                @RequestParam Long studentId,
@@ -120,6 +123,7 @@ public class GradeController {
     }
 
     @PostMapping("/{courseId}/recalculate")
+    @PreAuthorize("hasAnyRole('FACULTY','ADMIN')")
     public String recalculate(@PathVariable Long courseId, RedirectAttributes redirect) {
         GradeRule rule = gradeRuleRepository.findFirstByCourseIdAndIsActiveTrueOrderByVersionDesc(courseId)
                 .orElseThrow(() -> new IllegalArgumentException("No active rule for course " + courseId));

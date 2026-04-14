@@ -106,6 +106,18 @@ class OrderApiTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void testCrossUserMutationDenied() {
+        // Create an order owned by faculty (id=2). A different actor (student id=4)
+        // must be rejected by the service layer even though the controller is
+        // bypassed — this proves the object-level check lives in the service.
+        Order other = orderService.createOrder(2L, UUID.randomUUID().toString(), "course", 1L);
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> orderService.completePayment(other.getId(), 4L));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+                () -> orderService.cancelOrder(other.getId(), 4L, "not mine"));
+    }
+
+    @Test
     @WithMockUser(username = "student", roles = "STUDENT")
     void testOrdersListPageRenders() throws Exception {
         mockMvc.perform(get("/orders"))

@@ -57,11 +57,13 @@ public class SecurityConfig {
         http
             // CSRF: enabled on every form post. CookieCsrfTokenRepository.withHttpOnlyFalse
             // lets the HTMX layer read the token from the meta tag and forward it.
+            // CSRF on for every mutating endpoint, including /api/v1/** so
+            // session-authenticated browsers cannot be targeted from another
+            // origin. Token is exposed via cookie + meta tag for HTMX.
             .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                .ignoringRequestMatchers("/api/v1/**"))
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/css/**", "/js/**", "/images/**", "/webjars/**", "/favicon.ico").permitAll()
+                .requestMatchers("/css/**", "/js/**", "/images/**", "/webjars/**", "/vendor/**", "/favicon.ico").permitAll()
                 .requestMatchers("/login", "/error").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers("/grades/**").hasAnyRole("FACULTY", "ADMIN", "STUDENT")

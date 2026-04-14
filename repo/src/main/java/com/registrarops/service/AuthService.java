@@ -43,15 +43,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final DeviceBindingRepository deviceBindingRepository;
     private final SecurityNoticeRepository securityNoticeRepository;
+    private final MessageService messageService;
 
     public AuthService(LoginAttemptRepository loginAttemptRepository,
                        UserRepository userRepository,
                        DeviceBindingRepository deviceBindingRepository,
-                       SecurityNoticeRepository securityNoticeRepository) {
+                       SecurityNoticeRepository securityNoticeRepository,
+                       MessageService messageService) {
         this.loginAttemptRepository = loginAttemptRepository;
         this.userRepository = userRepository;
         this.deviceBindingRepository = deviceBindingRepository;
         this.securityNoticeRepository = securityNoticeRepository;
+        this.messageService = messageService;
     }
 
     /** Insert a failed-login row for this username. */
@@ -88,6 +91,9 @@ public class AuthService {
     public void detectUnusualLogin(String username, HttpServletRequest request) {
         if (request == null) return;
         userRepository.findByUsername(username).ifPresent(user -> {
+            // Audit #12: device binding is opt-in per user. If disabled, do not
+            // bind or emit unusual-login notices at all.
+            if (!Boolean.TRUE.equals(user.getDeviceBindingEnabled())) return;
             String hash = deviceHash(request);
             boolean known = deviceBindingRepository.existsByUserIdAndDeviceHash(user.getId(), hash);
             if (known) return;
@@ -111,6 +117,12 @@ public class AuthService {
                 notice.setIsRead(false);
                 notice.setCreatedAt(LocalDateTime.now());
                 securityNoticeRepository.save(notice);
+                // Also surface the notice through the in-app notification center so
+                // it appears alongside the user's regular messages (audit #10).
+                messageService.send(user.getId(), "SECURITY",
+                        "New device used to sign in",
+                        notice.getMessage(),
+                        null, null);
                 log.warn("unusual-login notice issued for user={} ip={}", username, request.getRemoteAddr());
             }
         });

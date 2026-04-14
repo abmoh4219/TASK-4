@@ -96,13 +96,17 @@ class GradeApiTest extends AbstractIntegrationTest {
     @Test
     @WithMockUser(username = "student", roles = "STUDENT")
     void testStudentCannotEnterGrade() throws Exception {
-        // /grades/{id}/components is open under the URL-rule pattern for grades/**
-        // (FACULTY|ADMIN|STUDENT), but real protection is at the controller level.
-        // Verify that the student cannot HIT the faculty-only grade entry endpoint:
-        // controller still accepts it under URL rules, so we just verify no exception.
-        // (Phase 8 will tighten with @PreAuthorize.)
+        // Audit blocker #1: student must be blocked from the faculty-only grade
+        // entry page and from posting grade components.
         mockMvc.perform(get("/grades/1/entry"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/grades/{cid}/components", 1L)
+                        .with(csrf())
+                        .param("studentId", "4")
+                        .param("componentName", "coursework")
+                        .param("score", "99")
+                        .param("maxScore", "100"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

@@ -8,9 +8,13 @@ import com.registrarops.repository.UserRepository;
 import com.registrarops.security.PasswordComplexityValidator;
 import com.registrarops.service.AuditService;
 import com.registrarops.service.ImportExportService;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +25,8 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Admin pages: user management, CSV import, audit log viewer, system config.
@@ -38,17 +44,20 @@ public class AdminController {
     private final ImportExportService importExportService;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
+    private final com.registrarops.service.PolicySettingService policySettingService;
 
     public AdminController(UserRepository userRepository,
                            AuditLogRepository auditLogRepository,
                            ImportExportService importExportService,
                            AuditService auditService,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           com.registrarops.service.PolicySettingService policySettingService) {
         this.userRepository = userRepository;
         this.auditLogRepository = auditLogRepository;
         this.importExportService = importExportService;
         this.auditService = auditService;
         this.passwordEncoder = passwordEncoder;
+        this.policySettingService = policySettingService;
     }
 
     @GetMapping
@@ -124,12 +133,33 @@ public class AdminController {
     @PostMapping("/import/csv")
     public String importCsv(@AuthenticationPrincipal UserDetails principal,
                             @RequestParam("file") MultipartFile file,
+                            @RequestParam(value = "map_code",     required = false) String mapCode,
+                            @RequestParam(value = "map_title",    required = false) String mapTitle,
+                            @RequestParam(value = "map_credits",  required = false) String mapCredits,
+                            @RequestParam(value = "map_price",    required = false) String mapPrice,
+                            @RequestParam(value = "map_category", required = false) String mapCategory,
                             Model model) {
         User actor = userRepository.findByUsername(principal.getUsername()).orElseThrow();
+        Map<String, String> mapping = new HashMap<>();
+        if (mapCode     != null && !mapCode.isBlank())     mapping.put("code", mapCode);
+        if (mapTitle    != null && !mapTitle.isBlank())    mapping.put("title", mapTitle);
+        if (mapCredits  != null && !mapCredits.isBlank())  mapping.put("credits", mapCredits);
+        if (mapPrice    != null && !mapPrice.isBlank())    mapping.put("price", mapPrice);
+        if (mapCategory != null && !mapCategory.isBlank()) mapping.put("category", mapCategory);
         ImportExportService.ImportResult result = importExportService.importCoursesCsv(
-                file, actor.getId(), actor.getUsername());
+                file, actor.getId(), actor.getUsername(), mapping);
         model.addAttribute("result", result);
         return "admin/import";
+    }
+
+    @GetMapping("/export/courses.csv")
+    public ResponseEntity<ByteArrayResource> exportCourses() {
+        byte[] csv = importExportService.exportCoursesCsv();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"courses.csv\"")
+                .body(new ByteArrayResource(csv));
     }
 
     @GetMapping("/audit")
@@ -146,6 +176,23 @@ public class AdminController {
     @GetMapping("/config")
     public String config(Model model) {
         model.addAttribute("now", LocalDateTime.now());
+        model.addAttribute("settings", policySettingService.findAll());
+        model.addAttribute("allowedKeys", policySettingService.allowedKeys());
         return "admin/config";
+    }
+
+    @PostMapping("/config")
+    public String updateConfig(@AuthenticationPrincipal UserDetails principal,
+                               @RequestParam("key") String key,
+                               @RequestParam("value") String value,
+                               RedirectAttributes redirect) {
+        User actor = userRepository.findByUsername(principal.getUsername()).orElseThrow();
+        try {
+            policySettingService.set(key, value, actor.getId(), actor.getUsername());
+            redirect.addFlashAttribute("flashSuccess", "Setting '" + key + "' updated.");
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("flashError", e.getMessage());
+        }
+        return "redirect:/admin/config";
     }
 }

@@ -13,6 +13,18 @@
           <tr><th>Role</th>      <td th:text="${user.role}">role</td></tr>
         </tbody>
       </table>
+      <form th:action="@{/profile/device-binding}" method="post" class="mt-3">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+        <div class="form-check form-switch">
+          <input type="hidden" name="enabled" value="false"/>
+          <input class="form-check-input" type="checkbox" role="switch" id="dbToggle"
+                 name="enabled" value="true" th:checked="${user.deviceBindingEnabled}"/>
+          <label class="form-check-label" for="dbToggle">
+            Device binding (alert me when a new device signs in)
+          </label>
+        </div>
+        <button type="submit" class="btn btn-outline-light btn-sm mt-2">Save preference</button>
+      </form>
       <a th:href="@{/account/delete}" class="btn btn-outline-light mt-3">Delete my account</a>
     </div>
   </section>
