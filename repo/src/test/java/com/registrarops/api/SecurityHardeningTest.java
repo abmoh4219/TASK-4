@@ -3,6 +3,7 @@ package com.registrarops.api;
 import com.registrarops.entity.User;
 import com.registrarops.repository.UserRepository;
 import com.registrarops.service.AccountDeletionService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -200,16 +201,24 @@ class SecurityHardeningTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("orders.refund_window_days")));
 
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .put("/api/v1/policy/orders.refund_window_days")
-                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"value\":\"21\"}"))
-                .andExpect(status().isOk());
+        try {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .put("/api/v1/policy/orders.refund_window_days")
+                            .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                            .content("{\"value\":\"21\"}"))
+                    .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/v1/policy/orders.refund_window_days"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"value\":\"21\"")));
+            mockMvc.perform(get("/api/v1/policy/orders.refund_window_days"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("\"value\":\"21\"")));
+        } finally {
+            // Restore the canonical 14-day refund window so other test methods
+            // in this class (notably testRefundPolicyReadsFromConfig) are not
+            // poisoned by the 21 value — Testcontainers shares MySQL state
+            // across methods and classes, so mutation leaks without cleanup.
+            policySettingService.set("orders.refund_window_days", "14", 1L, "admin");
+        }
     }
 
     @Test
@@ -240,6 +249,23 @@ class SecurityHardeningTest extends AbstractIntegrationTest {
     }
 
     @Autowired private com.registrarops.service.PolicySettingService policySettingService;
+
+    /**
+     * Restore canonical V015 seed values for every policy key after each test.
+     * Testcontainers shares the MySQL instance across test methods / classes,
+     * so without this cleanup a method that mutates policy_settings (e.g.
+     * testPolicyApiReadWrite writes 21) can poison later methods that assert
+     * the 14-day default (testRefundPolicyReadsFromConfig).
+     */
+    @AfterEach
+    void restoreCanonicalPolicyDefaults() {
+        policySettingService.set("orders.payment_timeout_minutes", "30", 1L, "admin");
+        policySettingService.set("orders.refund_window_days",      "14", 1L, "admin");
+        policySettingService.set("orders.idempotency_window_minutes","10", 1L, "admin");
+        policySettingService.set("retry.max_attempts",              "3",  1L, "admin");
+        policySettingService.set("notifications.quiet_start_hour",  "22", 1L, "admin");
+        policySettingService.set("notifications.quiet_end_hour",    "7",  1L, "admin");
+    }
 
     @Test
     void testRefundPolicyReadsFromConfig() {
