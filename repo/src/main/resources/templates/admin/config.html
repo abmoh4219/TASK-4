@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('System config', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <h1 class="h4 mb-3">System config</h1>
+      <table class="table">
+        <tbody>
+          <tr><th>GPA scale</th><td>90→4.0 · 85→3.7 · 80→3.3 · 75→3.0 · 70→2.7 · 60→2.0 · &lt;60→0.0</td></tr>
+          <tr><th>Refund window</th><td>14 days from payment unless exception_status=true</td></tr>
+          <tr><th>Order auto-cancel</th><td>30 minutes after CREATED</td></tr>
+          <tr><th>Lockout policy</th><td>5 failed attempts within 15 minutes</td></tr>
+          <tr><th>Quiet hours (default)</th><td>22:00 – 07:00 local</td></tr>
+          <tr><th>Evidence file size cap</th><td>10 MB · PDF/JPG/PNG/DOCX only</td></tr>
+          <tr><th>Retry queue backoff</th><td>2^N × 60 seconds, max 3 attempts</td></tr>
+          <tr><th>Server time</th><td th:text="${now}">now</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</body>
+</html>

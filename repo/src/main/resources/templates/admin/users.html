@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Users', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <h1 class="h4 mb-3">Users</h1>
+      <table class="table">
+        <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Active</th><th>Email</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="u : ${users}">
+            <td th:text="${u.id}">1</td>
+            <td th:text="${u.username}">name</td>
+            <td><span class="ro-role-badge ro-role-admin" th:text="${u.role}">role</span></td>
+            <td th:text="${u.isActive} ? 'yes' : 'no'">yes</td>
+            <td th:text="${u.email}">email</td>
+            <td>
+              <form th:if="${u.isActive}" th:action="@{/admin/users/{id}/deactivate(id=${u.id})}" method="post" class="m-0">
+                <button type="submit" class="btn btn-sm btn-outline-light">Deactivate</button>
+              </form>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ro-card">
+      <h2 class="h6">Add user</h2>
+      <form th:action="@{/admin/users}" method="post" class="row g-2 align-items-end">
+        <div class="col-md-2"><label class="form-label">Username</label><input type="text" name="username" class="form-control" required/></div>
+        <div class="col-md-3"><label class="form-label">Password</label><input type="text" name="password" class="form-control" required placeholder="≥12 chars + complexity"/></div>
+        <div class="col-md-2"><label class="form-label">Role</label>
+          <select name="role" class="form-select">
+            <option th:each="r : ${roles}" th:value="${r}" th:text="${r}">role</option>
+          </select>
+        </div>
+        <div class="col-md-2"><label class="form-label">Email</label><input type="email" name="email" class="form-control"/></div>
+        <div class="col-md-2"><label class="form-label">Full name</label><input type="text" name="fullName" class="form-control"/></div>
+        <div class="col-md-1"><button type="submit" class="btn btn-primary w-100">Add</button></div>
+      </form>
+    </div>
+  </section>
+</div>
+</body>
+</html>

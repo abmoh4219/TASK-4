@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="badge(count)">
+  <span class="ro-notif-bell" title="Notifications">
+    &#9737;
+    <span th:if="${count != null and count > 0}" class="ro-notif-count" th:text="${count}">1</span>
+  </span>
+</div>
+
+<div th:fragment="list" class="ro-suggestions-inner">
+  <div th:if="${#lists.isEmpty(messages)}" class="ro-suggestion-item" style="color: var(--text-muted);">
+    No messages.
+  </div>
+  <div th:each="m : ${messages}" class="ro-suggestion-item">
+    <strong th:text="${m.subject}">subject</strong>
+    <div style="color: var(--text-secondary); font-size: 12px;" th:text="${m.body}">body</div>
+  </div>
+</div>
+</body>
+</html>

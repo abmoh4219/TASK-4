@@ -107,8 +107,68 @@ public class MessageService {
         return messageRepository.findDeliveredForUser(userId, LocalDateTime.now());
     }
 
+    @Transactional
+    public void markAllRead(Long userId) {
+        for (Message m : listForUser(userId)) {
+            if (!Boolean.TRUE.equals(m.getIsRead())) {
+                m.setIsRead(true);
+                messageRepository.save(m);
+            }
+        }
+    }
+
+    @Transactional
+    public void markRead(Long messageId, Long userId) {
+        messageRepository.findById(messageId).ifPresent(m -> {
+            if (m.getRecipientId().equals(userId)) {
+                m.setIsRead(true);
+                messageRepository.save(m);
+            }
+        });
+    }
+
+    @Transactional
+    public MessagePreference muteCategory(Long userId, String category) {
+        MessagePreference p = preferenceRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    MessagePreference fresh = new MessagePreference();
+                    fresh.setUserId(userId);
+                    fresh.setMutedCategories("");
+                    fresh.setQuietStartHour(22);
+                    fresh.setQuietEndHour(7);
+                    return fresh;
+                });
+        String existing = p.getMutedCategories() == null ? "" : p.getMutedCategories();
+        boolean already = false;
+        for (String s : existing.split(",")) {
+            if (s.trim().equalsIgnoreCase(category)) { already = true; break; }
+        }
+        if (!already) {
+            p.setMutedCategories(existing.isBlank() ? category : existing + "," + category);
+        }
+        return preferenceRepository.save(p);
+    }
+
+    @Transactional
+    public MessagePreference updateQuietHours(Long userId, int startHour, int endHour) {
+        MessagePreference p = preferenceRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    MessagePreference fresh = new MessagePreference();
+                    fresh.setUserId(userId);
+                    fresh.setMutedCategories("");
+                    return fresh;
+                });
+        p.setQuietStartHour(startHour);
+        p.setQuietEndHour(endHour);
+        return preferenceRepository.save(p);
+    }
+
+    public MessagePreference getPreferences(Long userId) {
+        return preferenceRepository.findByUserId(userId).orElse(null);
+    }
+
     /** Visible for unit tests: true if {@code hour} falls inside [start, end) wrapping at midnight. */
-    static boolean isInQuietHours(int hour, int start, int end) {
+    public static boolean isInQuietHours(int hour, int start, int end) {
         if (start == end) return false;
         if (start < end) return hour >= start && hour < end;
         // wraps midnight: e.g. start=22, end=7 → quiet if hour>=22 OR hour<7

@@ -3,9 +3,32 @@
 <body>
 <div th:replace="~{layout/base :: layout('Administration', ~{::section})}">
   <section>
+    <div class="row">
+      <div class="col-md-4">
+        <div class="ro-card">
+          <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Total users</div>
+          <div style="font-size: 32px; font-weight: 700;" th:text="${userCount}">0</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ro-card">
+          <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Audit log entries</div>
+          <div style="font-size: 32px; font-weight: 700;" th:text="${auditCount}">0</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="ro-card">
+          <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Failed retry jobs</div>
+          <div style="font-size: 32px; font-weight: 700; color: var(--accent-red);" th:text="${retryFailed}">0</div>
+        </div>
+      </div>
+    </div>
     <div class="ro-card">
-      <h1 class="h3 mb-3">Administration</h1>
-      <p style="color: var(--text-secondary);">User management, imports, audit log and config will be implemented in Phase 6.</p>
+      <h2 class="h6">Quick links</h2>
+      <a th:href="@{/admin/users}"  class="btn btn-outline-light me-2">Users</a>
+      <a th:href="@{/admin/import}" class="btn btn-outline-light me-2">Import</a>
+      <a th:href="@{/admin/audit}"  class="btn btn-outline-light me-2">Audit log</a>
+      <a th:href="@{/admin/config}" class="btn btn-outline-light">Config</a>
     </div>
   </section>
 </div>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Import courses', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <h1 class="h4 mb-3">Import courses (CSV)</h1>
+      <p style="color: var(--text-secondary);">
+        Required columns: <code>code, title, credits, price, category</code>.
+      </p>
+      <form th:action="@{/admin/import/csv}" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" class="form-control mb-2" accept=".csv,text/csv"/>
+        <button type="submit" class="btn btn-primary">Upload &amp; import</button>
+      </form>
+    </div>
+
+    <div th:if="${result != null}" class="ro-card">
+      <h2 class="h6">Result</h2>
+      <p>
+        Imported: <strong style="color: var(--accent-green);" th:text="${result.imported}">0</strong> ·
+        Skipped:  <strong style="color: var(--accent-amber);" th:text="${result.skipped}">0</strong>
+      </p>
+      <table th:if="${not #lists.isEmpty(result.errors)}" class="table">
+        <thead><tr><th>Row</th><th>Error</th></tr></thead>
+        <tbody>
+          <tr th:each="e : ${result.errors}">
+            <td th:text="${e.row}">0</td>
+            <td style="color: var(--accent-red);" th:text="${e.message}">err</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</body>
+</html>
