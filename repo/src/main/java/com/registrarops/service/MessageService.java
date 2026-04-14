@@ -33,11 +33,21 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final MessagePreferenceRepository preferenceRepository;
+    private final PolicySettingService policySettingService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public MessageService(MessageRepository messageRepository,
-                          MessagePreferenceRepository preferenceRepository) {
+                          MessagePreferenceRepository preferenceRepository,
+                          PolicySettingService policySettingService) {
         this.messageRepository = messageRepository;
         this.preferenceRepository = preferenceRepository;
+        this.policySettingService = policySettingService;
+    }
+
+    /** Test ctor without policy service. */
+    public MessageService(MessageRepository messageRepository,
+                          MessagePreferenceRepository preferenceRepository) {
+        this(messageRepository, preferenceRepository, null);
     }
 
     @Transactional
@@ -60,11 +70,24 @@ public class MessageService {
             }
         }
 
-        // 2. quiet-hours → defer to next 7 AM (or pref.quietEndHour)
+        // 2. quiet-hours → defer to next quiet-end hour. Per-user preference wins;
+        // otherwise the system-wide PolicySettingService values apply, which an
+        // admin can change at runtime via the policy admin surface.
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime deliverAt = null;
-        if (pref != null && isInQuietHours(now.getHour(), pref.getQuietStartHour(), pref.getQuietEndHour())) {
-            deliverAt = now.withHour(pref.getQuietEndHour()).withMinute(0).withSecond(0).withNano(0);
+        int quietStart;
+        int quietEnd;
+        if (pref != null) {
+            quietStart = pref.getQuietStartHour();
+            quietEnd   = pref.getQuietEndHour();
+        } else if (policySettingService != null) {
+            quietStart = policySettingService.getInt("notifications.quiet_start_hour", 22);
+            quietEnd   = policySettingService.getInt("notifications.quiet_end_hour", 7);
+        } else {
+            quietStart = 22; quietEnd = 7;
+        }
+        if (isInQuietHours(now.getHour(), quietStart, quietEnd)) {
+            deliverAt = now.withHour(quietEnd).withMinute(0).withSecond(0).withNano(0);
             if (!deliverAt.isAfter(now)) deliverAt = deliverAt.plusDays(1);
         }
 

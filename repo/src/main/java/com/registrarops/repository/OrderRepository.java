@@ -21,4 +21,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE o.status = :status AND o.createdAt < :before")
     List<Order> findExpiredByStatus(@Param("status") OrderStatus status,
                                     @Param("before") LocalDateTime before);
+
+    /** Orders in PAYING whose createdAt falls in the reminder window [windowStart, windowEnd]. */
+    @Query("SELECT o FROM Order o WHERE o.status = :status " +
+           "AND o.createdAt BETWEEN :windowStart AND :windowEnd")
+    List<Order> findInReminderWindow(@Param("status") OrderStatus status,
+                                     @Param("windowStart") LocalDateTime windowStart,
+                                     @Param("windowEnd") LocalDateTime windowEnd);
 }

@@ -88,9 +88,25 @@ public class OrderService {
     @Value("${registrarops.orders.idempotency-window-minutes:10}")
     private long idempotencyWindowMinutes = IDEMPOTENCY_WINDOW_MINUTES_DEFAULT;
 
-    public int getPaymentTimeoutMinutes() { return paymentTimeoutMinutes; }
-    public int getRefundWindowDays()      { return refundWindowDays; }
-    public long getIdempotencyWindowMinutes() { return idempotencyWindowMinutes; }
+    /**
+     * Runtime policy reads. PolicySettingService is the authoritative source —
+     * the @Value-injected fields above are only fallbacks if the corresponding
+     * row is missing from the policy_settings table. Admin updates to the
+     * canonical keys (orders.payment_timeout_minutes / refund_window_days /
+     * idempotency_window_minutes) take effect immediately on the next call.
+     */
+    public int getPaymentTimeoutMinutes() {
+        return policySettingService == null ? paymentTimeoutMinutes
+                : policySettingService.getInt("orders.payment_timeout_minutes", paymentTimeoutMinutes);
+    }
+    public int getRefundWindowDays() {
+        return policySettingService == null ? refundWindowDays
+                : policySettingService.getInt("orders.refund_window_days", refundWindowDays);
+    }
+    public long getIdempotencyWindowMinutes() {
+        return policySettingService == null ? idempotencyWindowMinutes
+                : policySettingService.getInt("orders.idempotency_window_minutes", (int) idempotencyWindowMinutes);
+    }
 
     private static final Map<OrderStatus, EnumSet<OrderStatus>> ALLOWED;
     static {
@@ -107,17 +123,31 @@ public class OrderService {
     private final CourseRepository courseRepository;
     private final AuditService auditService;
     private final MessageService messageService;
+    private final PolicySettingService policySettingService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public OrderService(OrderRepository orderRepository,
                         OrderItemRepository orderItemRepository,
                         CourseRepository courseRepository,
                         AuditService auditService,
-                        MessageService messageService) {
+                        MessageService messageService,
+                        PolicySettingService policySettingService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.courseRepository = courseRepository;
         this.auditService = auditService;
         this.messageService = messageService;
+        this.policySettingService = policySettingService;
+    }
+
+    /** Test/legacy ctor: no PolicySettingService → falls back to @Value defaults. */
+    public OrderService(OrderRepository orderRepository,
+                        OrderItemRepository orderItemRepository,
+                        CourseRepository courseRepository,
+                        AuditService auditService,
+                        MessageService messageService) {
+        this(orderRepository, orderItemRepository, courseRepository,
+             auditService, messageService, null);
     }
 
     /**
@@ -133,7 +163,7 @@ public class OrderService {
         Optional<Order> existing = orderRepository.findByCorrelationId(correlationId);
         if (existing.isPresent()) {
             Order prior = existing.get();
-            if (Duration.between(prior.getCreatedAt(), LocalDateTime.now()).toMinutes() <= idempotencyWindowMinutes) {
+            if (Duration.between(prior.getCreatedAt(), LocalDateTime.now()).toMinutes() <= getIdempotencyWindowMinutes()) {
                 log.info("idempotent createOrder: returning existing order {} for correlationId {}",
                         prior.getId(), correlationId);
                 return prior;
@@ -254,7 +284,7 @@ public class OrderService {
     public boolean isRefundAllowed(Order order) {
         if (order.getStatus() != OrderStatus.PAID || order.getPaidAt() == null) return false;
         if (Boolean.TRUE.equals(order.getExceptionStatus())) return true;
-        return Duration.between(order.getPaidAt(), LocalDateTime.now()).toDays() < refundWindowDays;
+        return Duration.between(order.getPaidAt(), LocalDateTime.now()).toDays() < getRefundWindowDays();
     }
 
     /**
@@ -264,7 +294,7 @@ public class OrderService {
     @Scheduled(fixedDelay = 60_000)
     @Transactional
     public void cancelExpiredOrders() {
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(paymentTimeoutMinutes);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(getPaymentTimeoutMinutes());
         List<Order> expired = orderRepository.findExpiredByStatus(OrderStatus.PAYING, cutoff);
         for (Order o : expired) {
             try {
@@ -274,6 +304,55 @@ public class OrderService {
             }
         }
         if (!expired.isEmpty()) log.info("auto-canceled {} expired orders", expired.size());
+    }
+
+    /**
+     * Pre-timeout reminder sweep: warn the student ~5 minutes before the order
+     * auto-cancels. Runs every minute; the MessageService dedup window
+     * (1 hour, same category+relatedId) collapses repeat reminders into a
+     * single threaded message so we never spam.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    @Transactional
+    public void sendPaymentReminders() {
+        int timeout = getPaymentTimeoutMinutes();
+        if (timeout <= 5) return;
+        LocalDateTime now = LocalDateTime.now();
+        // window: orders created (timeout-5)..(timeout-4) minutes ago — i.e.
+        // 5 minutes before they would be auto-canceled by cancelExpiredOrders.
+        LocalDateTime windowEnd   = now.minusMinutes(timeout - 5);
+        LocalDateTime windowStart = now.minusMinutes(timeout - 4);
+        List<Order> due = orderRepository.findInReminderWindow(OrderStatus.PAYING, windowStart, windowEnd);
+        for (Order o : due) {
+            try {
+                messageService.send(o.getStudentId(), "ORDER_REMINDER",
+                        "Order payment reminder",
+                        "Order #" + o.getId() + " will auto-cancel in ~5 minutes if payment is not completed.",
+                        o.getId(), "Order");
+            } catch (Exception e) {
+                log.warn("reminder send failed for order {}: {}", o.getId(), e.toString());
+            }
+        }
+    }
+
+    /**
+     * Mark an order as exception (admin escape hatch + emits an exception
+     * notification to the student). The exception flag also unlocks the
+     * post-14-day refund path in {@link #isRefundAllowed(Order)}.
+     */
+    @Transactional
+    public Order markException(Long orderId, Long actorId, String reason) {
+        Order order = mustFind(orderId);
+        order.setExceptionStatus(true);
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+        auditService.log(actorId, null, "ORDER_EXCEPTION", "Order", orderId, null,
+                "{\"reason\":\"" + (reason == null ? "" : reason.replace("\"", "'")) + "\"}", null);
+        messageService.send(order.getStudentId(), "ORDER_EXCEPTION",
+                "Order flagged with exception",
+                "Order #" + orderId + " has been flagged with an exception. " + (reason == null ? "" : reason),
+                orderId, "Order");
+        return order;
     }
 
     public List<Order> findByStudent(Long studentId) {

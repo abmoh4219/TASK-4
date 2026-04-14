@@ -3,6 +3,7 @@ package com.registrarops.controller;
 import com.registrarops.entity.User;
 import com.registrarops.repository.UserRepository;
 import com.registrarops.service.AccountDeletionService;
+import com.registrarops.service.ExportTokenService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,11 +31,14 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final AccountDeletionService accountDeletionService;
+    private final ExportTokenService exportTokenService;
 
     public AuthController(UserRepository userRepository,
-                          AccountDeletionService accountDeletionService) {
+                          AccountDeletionService accountDeletionService,
+                          ExportTokenService exportTokenService) {
         this.userRepository = userRepository;
         this.accountDeletionService = accountDeletionService;
+        this.exportTokenService = exportTokenService;
     }
 
     @GetMapping("/login")
@@ -69,33 +73,36 @@ public class AuthController {
 
     @PostMapping("/account/delete")
     public String performDelete(@AuthenticationPrincipal UserDetails principal,
-                                RedirectAttributes redirect) {
+                                jakarta.servlet.http.HttpServletRequest request,
+                                Model model) {
         User user = userRepository.findByUsername(principal.getUsername()).orElseThrow();
         String token = accountDeletionService.exportAndSoftDelete(user.getId());
-        redirect.addFlashAttribute("flashSuccess",
-                "Account deleted. Your data archive is available for in-app download for 7 days using the link below.");
-        return "redirect:/account/export/" + token;
+        // The user is now soft-deleted; their session is no longer valid for any
+        // authenticated route. Invalidate it explicitly so the deletion-confirmation
+        // page renders cleanly and the token download works post-logout.
+        try { request.logout(); } catch (Exception ignored) { }
+        if (request.getSession(false) != null) request.getSession().invalidate();
+        model.addAttribute("exportUrl", "/account/export/" + token);
+        model.addAttribute("ttlDays", 7);
+        return "auth/deleted";
     }
 
     /**
-     * Download the local export file. The token is bound to the authenticated
-     * principal: we load ONLY the current user's export-file record and compare
-     * the token from the filename with exact equality. No cross-user scan.
+     * Download the local export archive using a self-contained HMAC-signed token.
+     * Intentionally NO authentication: the user is soft-deleted immediately at
+     * deletion time and login is blocked for the 7-day window, so a session-based
+     * gate would make the archive permanently unreachable. The token carries the
+     * userId + expiry under a server-side HMAC, so forgery / cross-user / expired
+     * tokens are rejected.
      */
     @GetMapping("/account/export/{token}")
-    public ResponseEntity<?> downloadExport(@AuthenticationPrincipal UserDetails principal,
-                                            @PathVariable String token) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        User user = userRepository.findByUsername(principal.getUsername()).orElse(null);
-        if (user == null || user.getExportFilePath() == null) {
-            return ResponseEntity.notFound().build();
-        }
-        Path file = Paths.get(user.getExportFilePath());
-        String expectedToken = extractToken(file.getFileName().toString(), user.getId());
-        if (expectedToken == null || !expectedToken.equals(token)) {
+    public ResponseEntity<?> downloadExport(@PathVariable String token) {
+        Long userId = exportTokenService.verify(token);
+        if (userId == null) {
             return ResponseEntity.status(403).build();
         }
-        if (!file.toFile().exists()) {
+        Path file = accountDeletionService.resolveExportFile(userId);
+        if (file == null || !file.toFile().exists()) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
@@ -103,12 +110,5 @@ public class AuthController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + file.getFileName() + "\"")
                 .body(new FileSystemResource(file));
-    }
-
-    /** Parse "user_{id}_{token}.json" → {token}, returning null on mismatch. */
-    private static String extractToken(String filename, Long userId) {
-        String prefix = "user_" + userId + "_";
-        if (filename == null || !filename.startsWith(prefix) || !filename.endsWith(".json")) return null;
-        return filename.substring(prefix.length(), filename.length() - ".json".length());
     }
 }

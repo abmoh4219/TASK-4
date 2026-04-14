@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Account deleted</title>
+  <link rel="stylesheet" href="/webjars/bootstrap/5.3.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body style="background: var(--bg-primary, #0D1117); color: var(--text-primary, #E6EDF3);">
+<div class="container py-5">
+  <div class="ro-card mx-auto" style="max-width: 720px; background: var(--bg-card, #1C2128); padding: 32px; border-radius: 8px; border: 1px solid var(--border, #30363D);">
+    <h1 class="h3 mb-3" style="color: var(--accent-green, #3FB950);">Account deleted</h1>
+    <p>Your account has been soft-deleted and your data has been exported.</p>
+    <p>Your archive download link is valid for <strong th:text="${ttlDays}">7</strong> days.
+      <strong>Save it now</strong> — you cannot sign in to retrieve it again.</p>
+
+    <div class="alert alert-secondary mt-3" style="word-break: break-all;">
+      <a th:href="@{${exportUrl}}" th:text="${exportUrl}">/account/export/...</a>
+    </div>
+
+    <a th:href="@{${exportUrl}}" class="btn btn-primary">Download archive (.json)</a>
+    <a th:href="@{/login}" class="btn btn-outline-light ms-2">Back to login</a>
+  </div>
+</div>
+</body>
+</html>

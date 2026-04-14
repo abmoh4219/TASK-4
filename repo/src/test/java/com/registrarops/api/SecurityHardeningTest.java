@@ -239,21 +239,23 @@ class SecurityHardeningTest extends AbstractIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Autowired private com.registrarops.service.PolicySettingService policySettingService;
+
     @Test
     void testRefundPolicyReadsFromConfig() {
-        // Default in application.yml is 14. We prove the injected getter is
-        // live (vs a hardcoded constant) by flipping it via ReflectionTestUtils
-        // and observing downstream logic change.
+        // After Cycle 2 remediation, OrderService reads runtime policy from
+        // PolicySettingService. We prove the getter is live by mutating the
+        // policy row and observing downstream logic change — then restore.
         assertEquals(14, orderService.getRefundWindowDays());
         assertEquals(30, orderService.getPaymentTimeoutMinutes());
         assertEquals(10L, orderService.getIdempotencyWindowMinutes());
 
-        org.springframework.test.util.ReflectionTestUtils.setField(
-                orderService, "refundWindowDays", 1);
-        assertEquals(1, orderService.getRefundWindowDays());
-        // Restore so downstream tests are unaffected.
-        org.springframework.test.util.ReflectionTestUtils.setField(
-                orderService, "refundWindowDays", 14);
+        policySettingService.set("orders.refund_window_days", "1", 1L, "admin");
+        try {
+            assertEquals(1, orderService.getRefundWindowDays());
+        } finally {
+            policySettingService.set("orders.refund_window_days", "14", 1L, "admin");
+        }
     }
 
     @Test

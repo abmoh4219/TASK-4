@@ -28,8 +28,10 @@ import java.util.Map;
  *   GET /api/v1/students            → ADMIN, REVIEWER (paginated)
  *   GET /api/v1/students/{id}/grades → ADMIN, REVIEWER, FACULTY
  *
- * Returns plain JSON (Jackson auto). CSRF is NOT required for GETs and is
- * already excluded for /api/v1/** in SecurityConfig.
+ * Returns plain JSON (Jackson auto). CSRF is enforced for browser sessions on
+ * this endpoint (read-only GETs are unaffected). The integration import/export
+ * endpoints under /api/v1/import|export are exempt from CSRF and authenticated
+ * via X-API-Key (see {@link com.registrarops.security.ApiKeyAuthFilter}).
  */
 @RestController
 @RequestMapping("/api/v1/students")

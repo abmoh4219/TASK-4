@@ -56,6 +56,7 @@ public class ImportExportService {
     private final CourseRepository courseRepository;
     private final RetryJobRepository retryJobRepository;
     private final AuditService auditService;
+    private final PolicySettingService policySettingService;
 
     /**
      * Per-job-type retry handlers. Register at bean startup (or in tests via
@@ -67,6 +68,12 @@ public class ImportExportService {
     /** Production job types that MUST have handlers registered at startup. */
     public static final String JOB_COURSE_IMPORT_ACK = "COURSE_IMPORT_ACK";
     public static final String JOB_CATALOG_RECOMPUTE = "CATALOG_RECOMPUTE";
+    public static final String JOB_COURSE_IMPORT_RETRY = "COURSE_IMPORT_RETRY";
+
+    /** On-disk artifact directory for failed-import row replays. */
+    private final java.nio.file.Path importArtifactDir =
+            java.nio.file.Paths.get(System.getProperty("registrarops.import-artifact-dir",
+                    System.getenv().getOrDefault("REGISTRAROPS_IMPORT_ARTIFACT_DIR", "/tmp/import-artifacts")));
 
     /**
      * Register default handlers for all production job types. Explicit wiring
@@ -85,6 +92,26 @@ public class ImportExportService {
         // Catalog recompute is a cheap idempotent operation; re-queue-safe.
         handlers.putIfAbsent(JOB_CATALOG_RECOMPUTE, job ->
                 log.info("retry handler: CATALOG_RECOMPUTE id={} executed", job.getId()));
+
+        // Course-import retry handler: re-parse the persisted artifact CSV and
+        // re-attempt all rows. If ANY row still fails the handler throws so the
+        // retry queue applies its backoff/maxAttempts policy.
+        handlers.putIfAbsent(JOB_COURSE_IMPORT_RETRY, job -> {
+            String path = job.getPayload();
+            if (path == null || path.isBlank()) {
+                throw new IllegalStateException("missing artifact path for COURSE_IMPORT_RETRY");
+            }
+            java.nio.file.Path artifact = java.nio.file.Paths.get(path);
+            if (!java.nio.file.Files.exists(artifact)) {
+                throw new IllegalStateException("artifact gone: " + path);
+            }
+            ImportResult r = importArtifact(artifact);
+            log.info("COURSE_IMPORT_RETRY id={} replay imported={} skipped={}",
+                    job.getId(), r.imported, r.skipped);
+            if (!r.errors.isEmpty()) {
+                throw new IllegalStateException("retry still has " + r.errors.size() + " row errors");
+            }
+        });
     }
 
     /** Test hook: expose current handler keys so startup-registration tests can assert. */
@@ -92,12 +119,27 @@ public class ImportExportService {
         return java.util.Set.copyOf(handlers.keySet());
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ImportExportService(CourseRepository courseRepository,
                                RetryJobRepository retryJobRepository,
-                               AuditService auditService) {
+                               AuditService auditService,
+                               PolicySettingService policySettingService) {
         this.courseRepository = courseRepository;
         this.retryJobRepository = retryJobRepository;
         this.auditService = auditService;
+        this.policySettingService = policySettingService;
+    }
+
+    public ImportExportService(CourseRepository courseRepository,
+                               RetryJobRepository retryJobRepository,
+                               AuditService auditService) {
+        this(courseRepository, retryJobRepository, auditService, null);
+    }
+
+    /** Authoritative runtime read of retry max-attempts (defaults to 3). */
+    public int getMaxRetryAttempts() {
+        return policySettingService == null ? 3
+                : policySettingService.getInt("retry.max_attempts", 3);
     }
 
     @Transactional
@@ -179,10 +221,84 @@ public class ImportExportService {
         auditService.log(actorId, actorUsername, "CSV_IMPORT", "Course", null, null,
                 "{\"imported\":" + result.imported + ",\"skipped\":" + result.skipped + "}", null);
 
-        // Row-level errors are returned to the caller in the ImportResult. We
-        // intentionally do NOT auto-schedule a retry here: the original upload
-        // is not persisted, so the retry dispatcher has nothing to re-run. The
-        // retry queue is reserved for jobs with real handlers (see dispatch).
+        // Failed-row replay: if the import had per-row errors AND we managed to
+        // capture the original bytes, persist the upload as an artifact and
+        // enqueue a COURSE_IMPORT_RETRY job. The retry handler re-parses the
+        // artifact and replays the import; only previously-failed rows can
+        // fail again because successfully-imported rows are now duplicates and
+        // are skipped by the existing duplicate check.
+        if (!result.errors.isEmpty() && result.skipped > 0) {
+            try {
+                java.nio.file.Files.createDirectories(importArtifactDir);
+                String artifactName = "courses_" + System.currentTimeMillis() + "_"
+                        + java.util.UUID.randomUUID().toString().substring(0, 8) + ".csv";
+                java.nio.file.Path artifact = importArtifactDir.resolve(artifactName);
+                java.nio.file.Files.write(artifact, file.getBytes());
+                RetryJob job = scheduleRetry(JOB_COURSE_IMPORT_RETRY, artifact.toString());
+                result.retryJobId = job.getId();
+                auditService.log(actorId, actorUsername, "CSV_IMPORT_RETRY_QUEUED",
+                        "RetryJob", job.getId(), null,
+                        "{\"artifact\":\"" + artifactName + "\"}", null);
+            } catch (Exception e) {
+                log.warn("failed to persist import artifact for retry: {}", e.toString());
+            }
+        }
+
+        return result;
+    }
+
+    /** Re-import path used by the retry handler — same parser, no actor audit. */
+    @Transactional
+    public ImportResult importArtifact(java.nio.file.Path artifact) {
+        ImportResult result = new ImportResult();
+        try (CSVReader reader = new CSVReader(new InputStreamReader(
+                java.nio.file.Files.newInputStream(artifact), StandardCharsets.UTF_8))) {
+            String[] header = reader.readNext();
+            if (header == null) {
+                result.errors.add(new RowError(0, "Missing header row"));
+                return result;
+            }
+            int idxCode = indexOf(header, "code");
+            int idxTitle = indexOf(header, "title");
+            int idxCredits = indexOf(header, "credits");
+            int idxPrice = indexOf(header, "price");
+            int idxCategory = indexOf(header, "category");
+            String[] row;
+            int rowNum = 1;
+            while ((row = reader.readNext()) != null) {
+                rowNum++;
+                try {
+                    String code = safe(row, idxCode).trim();
+                    String title = safe(row, idxTitle).trim();
+                    if (code.isEmpty() || title.isEmpty()) {
+                        result.errors.add(new RowError(rowNum, "code and title are required"));
+                        result.skipped++;
+                        continue;
+                    }
+                    if (courseRepository.findByCode(code).isPresent()) {
+                        result.skipped++;
+                        continue;
+                    }
+                    Course c = new Course();
+                    c.setCode(code);
+                    c.setTitle(title);
+                    c.setCredits(parseDecimal(safe(row, idxCredits), new BigDecimal("3.00")));
+                    c.setPrice(parseDecimal(safe(row, idxPrice), BigDecimal.ZERO));
+                    c.setCategory(safe(row, idxCategory));
+                    c.setIsActive(true);
+                    c.setRatingAvg(BigDecimal.ZERO);
+                    c.setEnrollCount(0);
+                    c.setCreatedAt(LocalDateTime.now());
+                    courseRepository.save(c);
+                    result.imported++;
+                } catch (Exception e) {
+                    result.errors.add(new RowError(rowNum, e.getMessage()));
+                    result.skipped++;
+                }
+            }
+        } catch (Exception e) {
+            result.errors.add(new RowError(0, "Failed to parse artifact: " + e.getMessage()));
+        }
         return result;
     }
 
@@ -192,7 +308,7 @@ public class ImportExportService {
         j.setJobType(jobType);
         j.setPayload(payload);
         j.setAttemptCount(0);
-        j.setMaxAttempts(3);
+        j.setMaxAttempts(getMaxRetryAttempts());
         j.setNextRetryAt(LocalDateTime.now());
         j.setStatus(RetryJob.Status.PENDING);
         j.setCreatedAt(LocalDateTime.now());
@@ -306,6 +422,7 @@ public class ImportExportService {
         public int imported = 0;
         public int skipped  = 0;
         public final List<RowError> errors = new ArrayList<>();
+        public Long retryJobId;
     }
 
     public record RowError(int row, String message) { }

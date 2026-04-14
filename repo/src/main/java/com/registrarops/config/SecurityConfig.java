@@ -1,7 +1,9 @@
 package com.registrarops.config;
 
+import com.registrarops.security.ApiKeyAuthFilter;
 import com.registrarops.security.AuthEventHandlers;
 import com.registrarops.security.CustomUserDetailsService;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -53,18 +55,26 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   AuthEventHandlers handlers) throws Exception {
+                                                   AuthEventHandlers handlers,
+                                                   ApiKeyAuthFilter apiKeyAuthFilter) throws Exception {
         http
-            // CSRF: enabled on every form post. CookieCsrfTokenRepository.withHttpOnlyFalse
-            // lets the HTMX layer read the token from the meta tag and forward it.
-            // CSRF on for every mutating endpoint, including /api/v1/** so
-            // session-authenticated browsers cannot be targeted from another
-            // origin. Token is exposed via cookie + meta tag for HTMX.
+            // CSRF: enabled for every browser form post (session-authenticated
+            // requests). CookieCsrfTokenRepository.withHttpOnlyFalse lets the
+            // HTMX layer read the token from the meta tag and forward it.
+            // The /api/v1/import/** and /api/v1/export/** endpoints are
+            // explicitly exempted: those are machine-to-machine integration
+            // endpoints authenticated via X-API-Key (ApiKeyAuthFilter), where
+            // CSRF tokens do not apply because there is no browser session.
             .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .ignoringRequestMatchers("/api/v1/import/**", "/api/v1/export/**"))
+            .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/css/**", "/js/**", "/images/**", "/webjars/**", "/vendor/**", "/favicon.ico").permitAll()
                 .requestMatchers("/login", "/error").permitAll()
+                // Token-bound export download must work AFTER soft-delete blocks
+                // login — ExportTokenService validates the HMAC + expiry inline.
+                .requestMatchers("/account/export/**").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers("/grades/**").hasAnyRole("FACULTY", "ADMIN", "STUDENT")
                 .requestMatchers("/evaluations/**").hasAnyRole("FACULTY", "REVIEWER", "ADMIN")

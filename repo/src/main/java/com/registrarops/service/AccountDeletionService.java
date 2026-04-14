@@ -50,6 +50,7 @@ public class AccountDeletionService {
     private final OrderRepository orderRepository;
     private final StudentGradeRepository studentGradeRepository;
     private final AuditService auditService;
+    private final ExportTokenService exportTokenService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Path exportDir;
 
@@ -57,12 +58,23 @@ public class AccountDeletionService {
                                   OrderRepository orderRepository,
                                   StudentGradeRepository studentGradeRepository,
                                   AuditService auditService,
+                                  ExportTokenService exportTokenService,
                                   @Value("${registrarops.export-dir:/tmp/exports}") String exportDir) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.studentGradeRepository = studentGradeRepository;
         this.auditService = auditService;
+        this.exportTokenService = exportTokenService;
         this.exportDir = Paths.get(exportDir);
+    }
+
+    /** Resolve the export file path for a verified userId (used by token download). */
+    public Path resolveExportFile(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getExportFilePath)
+                .filter(s -> s != null && !s.isBlank())
+                .map(Paths::get)
+                .orElse(null);
     }
 
     @Transactional
@@ -101,8 +113,8 @@ public class AccountDeletionService {
                 "weightedScore", g.getWeightedScore().toString(),
                 "calculatedAt", g.getCalculatedAt().toString())).toList());
 
-        String token = UUID.randomUUID().toString().replace("-", "");
-        Path file = exportDir.resolve("user_" + user.getId() + "_" + token + ".json");
+        String fileToken = UUID.randomUUID().toString().replace("-", "");
+        Path file = exportDir.resolve("user_" + user.getId() + "_" + fileToken + ".json");
         try {
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), payload);
         } catch (IOException e) {
@@ -119,7 +131,9 @@ public class AccountDeletionService {
                 "{\"exportFile\":\"" + file.getFileName() + "\"}", null);
 
         log.info("user {} soft-deleted, export at {}", user.getUsername(), file);
-        return token;
+        // Issue a self-contained HMAC-signed token (default TTL = 7 days) so the
+        // user can download their archive AFTER soft-delete blocks login.
+        return exportTokenService.issue(user.getId());
     }
 
     /** Daily cleanup: hard-anonymize users whose soft-delete is older than 7 days. */
