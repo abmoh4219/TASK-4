@@ -9,6 +9,7 @@ import com.registrarops.service.AccountDeletionService;
 import com.registrarops.service.ExportTokenService;
 import com.registrarops.service.ImportExportService;
 import com.registrarops.service.OrderService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
@@ -42,6 +43,23 @@ class Cycle2RemediationTest extends AbstractIntegrationTest {
     @Autowired private ImportExportService importExportService;
     @Autowired private RetryJobRepository retryJobRepository;
     @Value("${registrarops.api-key:}") String configuredApiKey;
+
+    /**
+     * Hard-restore every canonical policy key to its V015 seed value after
+     * every test so no policy mutation can leak into other test classes.
+     * Test-container mode shares the MySQL container across classes and only
+     * resets schema between runs, so leaks here would otherwise corrupt
+     * SecurityHardeningTest / OrderApiTest which assert the 14-day window.
+     */
+    @AfterEach
+    void restoreCanonicalPolicyDefaults() {
+        policySettingService.set("orders.payment_timeout_minutes", "30", 1L, "admin");
+        policySettingService.set("orders.refund_window_days",      "14", 1L, "admin");
+        policySettingService.set("orders.idempotency_window_minutes","10", 1L, "admin");
+        policySettingService.set("retry.max_attempts",              "3",  1L, "admin");
+        policySettingService.set("notifications.quiet_start_hour",  "22", 1L, "admin");
+        policySettingService.set("notifications.quiet_end_hour",    "7",  1L, "admin");
+    }
 
     // ---------- 1. Export token works without authentication ----------------
 
