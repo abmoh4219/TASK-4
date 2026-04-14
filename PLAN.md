@@ -241,8 +241,8 @@
 ## PHASE 9 — Documentation
 > Final phase — generate docs from actual implemented code. No pause needed.
 
-- [ ] 9.1 Create docs/design.md — from actual implemented code: ASCII architecture diagram (Browser→Thymeleaf templates←Spring Boot←MySQL), all JPA entities and relationships, security architecture (Spring Security config, CSRF, lockout, device binding), grade engine algorithm (weighted calculation, GPA scale, versioning), order state machine (all transitions, rules), message service (quiet hours, dedup, threading), import/export (retry queue with exponential backoff), audit log design (append-only, 7-year retention per prompt), Flyway migration list.
-- [ ] 9.2 Create docs/api-spec.md — from actual implemented code: every REST endpoint (method, path, role required, CSRF required, request/response shape, error codes), external integration REST API (/api/v1/**), HTMX endpoints (search suggestions, notification count), import/export endpoints, standard error response format.
+- [x] 9.1 Create docs/design.md — from actual implemented code: ASCII architecture diagram (Browser→Thymeleaf templates←Spring Boot←MySQL), all JPA entities and relationships, security architecture (Spring Security config, CSRF, lockout, device binding), grade engine algorithm (weighted calculation, GPA scale, versioning), order state machine (all transitions, rules), message service (quiet hours, dedup, threading), import/export (retry queue with exponential backoff), audit log design (append-only, 7-year retention per prompt), Flyway migration list.
+- [x] 9.2 Create docs/api-spec.md — from actual implemented code: every REST endpoint (method, path, role required, CSRF required, request/response shape, error codes), external integration REST API (/api/v1/**), HTMX endpoints (search suggestions, notification count), import/export endpoints, standard error response format.
 
 ---
 
