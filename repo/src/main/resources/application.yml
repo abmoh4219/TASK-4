@@ -8,7 +8,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      # Flyway is canonical schema source; Hibernate never modifies tables.
+      ddl-auto: none
     open-in-view: false
     properties:
       hibernate.dialect: org.hibernate.dialect.MySQLDialect
