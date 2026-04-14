@@ -4,8 +4,19 @@
 <div th:replace="~{layout/base :: layout('Grades', ~{::section})}">
   <section>
     <div class="ro-card">
-      <h1 class="h3 mb-3">Grades</h1>
-      <p style="color: var(--text-secondary);">Grade entry and reports will be implemented in Phase 5.</p>
+      <h1 class="h4 mb-3">Courses to grade</h1>
+      <div th:if="${#lists.isEmpty(courses)}" class="ro-empty">No courses available.</div>
+      <table th:if="${not #lists.isEmpty(courses)}" class="table">
+        <thead><tr><th>Code</th><th>Title</th><th>Credits</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="c : ${courses}">
+            <td th:text="${c.code}">CODE</td>
+            <td th:text="${c.title}">title</td>
+            <td th:text="${c.credits}">3.00</td>
+            <td><a th:href="@{/grades/{id}/entry(id=${c.id})}" class="btn btn-sm btn-primary">Enter grades</a></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </div>

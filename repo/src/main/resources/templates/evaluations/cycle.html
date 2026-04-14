@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Evaluation cycle', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <div style="display: flex; justify-content: space-between;">
+        <div>
+          <h1 class="h4 m-0" th:text="${cycle.title}">Title</h1>
+          <div style="color: var(--text-secondary);" th:text="'Course #' + ${cycle.courseId}">course</div>
+        </div>
+        <span class="ro-role-badge ro-role-faculty" th:text="${cycle.status}">DRAFT</span>
+      </div>
+    </div>
+
+    <div class="ro-card">
+      <h2 class="h6">Indicators</h2>
+      <table class="table">
+        <thead><tr><th>Name</th><th>Weight</th><th>Score</th><th>Mean</th><th>σ</th><th>Outlier?</th></tr></thead>
+        <tbody>
+          <tr th:each="i : ${indicators}">
+            <td th:text="${i.indicatorName}">name</td>
+            <td th:text="${i.weight}">0</td>
+            <td th:text="${i.score}">0</td>
+            <td th:text="${i.meanScore}">—</td>
+            <td th:text="${i.stdDev}">—</td>
+            <td>
+              <span th:if="${i.isOutlier}" class="ro-role-badge ro-role-reviewer">OUTLIER</span>
+              <span th:unless="${i.isOutlier}" style="color: var(--text-muted);">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <form th:if="${cycle.status.name() == 'DRAFT' or cycle.status.name() == 'OPEN'}"
+            th:action="@{/evaluations/{id}/indicators(id=${cycle.id})}" method="post" class="row g-2 align-items-end mt-2">
+        <div class="col-md-4">
+          <label class="form-label">Indicator name</label>
+          <input type="text" name="indicatorName" class="form-control" required/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Weight</label>
+          <input type="number" step="0.01" name="weight" class="form-control" required/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Score</label>
+          <input type="number" step="0.01" name="score" class="form-control" required/>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Add</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="ro-card">
+      <h2 class="h6">Evidence attachments</h2>
+      <table class="table">
+        <thead><tr><th>Filename</th><th>Type</th><th>Size</th><th>SHA-256</th></tr></thead>
+        <tbody>
+          <tr th:each="e : ${evidence}">
+            <td th:text="${e.originalFilename}">file</td>
+            <td th:text="${e.mimeType}">mime</td>
+            <td th:text="${e.fileSizeBytes}">0</td>
+            <td style="font-family: monospace; font-size: 11px;" th:text="${#strings.substring(e.sha256Hash, 0, 12) + '…'}">hash</td>
+          </tr>
+        </tbody>
+      </table>
+      <form th:action="@{/evaluations/{id}/evidence(id=${cycle.id})}" method="post" enctype="multipart/form-data" class="mt-2">
+        <input type="file" name="file" class="form-control mb-2"/>
+        <button type="submit" class="btn btn-outline-light">Upload evidence (≤10 MB · PDF/JPG/PNG/DOCX)</button>
+      </form>
+    </div>
+
+    <div class="d-flex gap-2">
+      <form th:if="${cycle.status.name() == 'DRAFT'}"
+            th:action="@{/evaluations/{id}/open(id=${cycle.id})}" method="post" class="m-0">
+        <button type="submit" class="btn btn-primary">Open cycle</button>
+      </form>
+      <form th:if="${cycle.status.name() == 'OPEN'}"
+            th:action="@{/evaluations/{id}/submit(id=${cycle.id})}" method="post" class="m-0">
+        <button type="submit" class="btn btn-primary">Submit for review</button>
+      </form>
+      <a th:href="@{/evaluations}" class="btn btn-outline-light">Back</a>
+    </div>
+  </section>
+</div>
+</body>
+</html>

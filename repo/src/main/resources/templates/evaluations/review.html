@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Reviewer audit', ~{::section})}">
+  <section>
+    <div class="ro-card">
+      <h1 class="h4 m-0" th:text="${cycle.title}">Title</h1>
+      <div style="color: var(--text-secondary);" th:text="'Status: ' + ${cycle.status}">status</div>
+    </div>
+
+    <div class="ro-card">
+      <h2 class="h6">Indicator scores (outliers highlighted)</h2>
+      <table class="table">
+        <thead><tr><th>Indicator</th><th>Score</th><th>Mean</th><th>σ</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="i : ${indicators}"
+              th:style="${i.isOutlier} ? 'background: rgba(248,81,73,0.08);' : ''">
+            <td th:text="${i.indicatorName}">name</td>
+            <td th:text="${i.score}">0</td>
+            <td th:text="${i.meanScore}">0</td>
+            <td th:text="${i.stdDev}">0</td>
+            <td><span th:if="${i.isOutlier}" class="ro-role-badge ro-role-reviewer">OUTLIER</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ro-card">
+      <h2 class="h6">Evidence</h2>
+      <ul style="list-style: none; padding: 0;">
+        <li th:each="e : ${evidence}" style="padding: 6px 0; color: var(--text-secondary);">
+          <strong th:text="${e.originalFilename}">file</strong>
+          <span style="color: var(--text-muted); margin-left: 8px;" th:text="${e.mimeType + ' · ' + e.fileSizeBytes + ' bytes'}">meta</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="ro-card" th:if="${cycle.status.name() == 'SUBMITTED'}">
+      <h2 class="h6">Approval</h2>
+      <form th:action="@{/evaluations/{id}/approve(id=${cycle.id})}" method="post">
+        <textarea name="comment" class="form-control mb-2" rows="3" placeholder="Reviewer comment"></textarea>
+        <button type="submit" class="btn btn-primary">Approve and close</button>
+      </form>
+    </div>
+
+    <a th:href="@{/evaluations}" class="btn btn-outline-light">Back</a>
+  </section>
+</div>
+</body>
+</html>

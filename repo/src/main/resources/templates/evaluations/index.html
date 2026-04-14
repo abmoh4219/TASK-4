@@ -1,11 +1,48 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security6">
 <body>
 <div th:replace="~{layout/base :: layout('Evaluations', ~{::section})}">
   <section>
     <div class="ro-card">
-      <h1 class="h3 mb-3">Evaluation Cycles</h1>
-      <p style="color: var(--text-secondary);">Evaluation workflow and outlier detection will be implemented in Phase 5.</p>
+      <h1 class="h4 mb-3" th:text="${isReviewer} ? 'Submitted cycles awaiting review' : 'My evaluation cycles'">Title</h1>
+      <div th:if="${#lists.isEmpty(cycles)}" class="ro-empty">No evaluation cycles.</div>
+      <table th:if="${not #lists.isEmpty(cycles)}" class="table">
+        <thead><tr><th>#</th><th>Title</th><th>Course</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="c : ${cycles}">
+            <td th:text="${c.id}">1</td>
+            <td th:text="${c.title}">title</td>
+            <td th:text="${c.courseId}">course</td>
+            <td><span class="ro-role-badge ro-role-faculty" th:text="${c.status}">DRAFT</span></td>
+            <td>
+              <a sec:authorize="hasRole('FACULTY')"
+                 th:href="@{/evaluations/{id}(id=${c.id})}" class="btn btn-sm btn-outline-light">Open</a>
+              <a sec:authorize="hasRole('REVIEWER')"
+                 th:href="@{/evaluations/{id}/review(id=${c.id})}" class="btn btn-sm btn-primary">Review</a>
+              <a sec:authorize="hasRole('ADMIN')"
+                 th:href="@{/evaluations/{id}(id=${c.id})}" class="btn btn-sm btn-outline-light">Open</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div sec:authorize="hasAnyRole('FACULTY','ADMIN')" class="ro-card">
+      <h2 class="h6">New cycle</h2>
+      <form th:action="@{/evaluations/create}" method="post" class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">Course ID</label>
+          <input type="number" name="courseId" class="form-control" required/>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Title</label>
+          <input type="text" name="title" class="form-control" required/>
+        </div>
+        <div class="col-md-3">
+          <button type="submit" class="btn btn-primary w-100">Create</button>
+        </div>
+      </form>
     </div>
   </section>
 </div>

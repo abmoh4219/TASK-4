@@ -1,7 +1,16 @@
-# Empty by design — Testcontainers @DynamicPropertySource configures datasource at test runtime.
+# Testcontainers @DynamicPropertySource configures the datasource URL at test
+# startup; this file just sets test-only overrides for file paths and pool sizing.
 spring:
   flyway:
     enabled: true
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 5000
+
+registrarops:
+  upload-dir: ${java.io.tmpdir}/registrarops-test-uploads
+  export-dir: ${java.io.tmpdir}/registrarops-test-exports
