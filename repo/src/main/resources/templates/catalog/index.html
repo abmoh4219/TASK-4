@@ -3,9 +3,121 @@
 <body>
 <div th:replace="~{layout/base :: layout('Catalog', ~{::section})}">
   <section>
+
+    <!-- Unified search bar with HTMX-powered live suggestions -->
     <div class="ro-card">
-      <h1 class="h3 mb-3">Course Catalog</h1>
-      <p style="color: var(--text-secondary);">Catalog browse and search will be implemented in Phase 3.</p>
+      <h1 class="h4 mb-3">Course Catalog</h1>
+      <form th:action="@{/catalog}" method="get" class="ro-search-wrap" style="position: relative;">
+        <input id="ro-search-input"
+               type="text"
+               name="q"
+               class="form-control ro-search-input"
+               placeholder="Search courses, materials, authors…"
+               th:value="${query}"
+               autocomplete="off"
+               hx-get="/api/search/suggestions"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#ro-search-dropdown"
+               hx-swap="innerHTML"/>
+        <div id="ro-search-dropdown" class="ro-search-dropdown"></div>
+      </form>
+    </div>
+
+    <div class="row">
+      <!-- Filter sidebar -->
+      <aside class="col-md-3">
+        <div class="ro-card">
+          <h2 class="h6" style="color: var(--text-secondary);">Filters</h2>
+          <form th:action="@{/catalog}" method="get">
+            <input type="hidden" name="q" th:value="${query}"/>
+            <div class="mb-3">
+              <label class="form-label">Category</label>
+              <select name="category" class="form-select">
+                <option value="">All categories</option>
+                <option value="Mathematics"      th:selected="${category == 'Mathematics'}">Mathematics</option>
+                <option value="Computer Science" th:selected="${category == 'Computer Science'}">Computer Science</option>
+                <option value="History"          th:selected="${category == 'History'}">History</option>
+                <option value="Chemistry"        th:selected="${category == 'Chemistry'}">Chemistry</option>
+                <option value="Arts"             th:selected="${category == 'Arts'}">Arts</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Min price</label>
+              <input type="number" step="0.01" name="minPrice" class="form-control" th:value="${minPrice}"/>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Max price</label>
+              <input type="number" step="0.01" name="maxPrice" class="form-control" th:value="${maxPrice}"/>
+            </div>
+            <div class="mb-3 form-check">
+              <input class="form-check-input" type="checkbox" name="newArrivals" value="true"
+                     id="newArrivals" th:checked="${newArrivals}"/>
+              <label class="form-check-label" for="newArrivals">New arrivals only</label>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Sort by</label>
+              <select name="sort" class="form-select">
+                <option value="">Default</option>
+                <option value="RATING"       th:selected="${sort?.name() == 'RATING'}">Rating</option>
+                <option value="PRICE_ASC"    th:selected="${sort?.name() == 'PRICE_ASC'}">Price ↑</option>
+                <option value="PRICE_DESC"   th:selected="${sort?.name() == 'PRICE_DESC'}">Price ↓</option>
+                <option value="NEW_ARRIVALS" th:selected="${sort?.name() == 'NEW_ARRIVALS'}">Newest</option>
+                <option value="BESTSELLERS"  th:selected="${sort?.name() == 'BESTSELLERS'}">Bestsellers</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Apply</button>
+          </form>
+        </div>
+      </aside>
+
+      <!-- Results grid -->
+      <div class="col-md-9">
+        <div th:if="${not #lists.isEmpty(results)}" class="row">
+          <div th:each="c : ${results}" class="col-md-6 mb-3">
+            <div class="ro-card" style="margin-bottom: 0; height: 100%;">
+              <div style="display: flex; justify-content: space-between; align-items: start;">
+                <h3 class="h6 mb-1">
+                  <a th:href="@{/catalog/detail/course/{id}(id=${c.id})}"
+                     style="color: var(--text-primary);"
+                     th:text="${c.title}">Title</a>
+                </h3>
+                <span class="ro-role-badge ro-role-student" th:text="${c.code}">CODE</span>
+              </div>
+              <div style="color: var(--text-secondary); font-size: 13px;" th:text="${c.authorName}">Author</div>
+              <p style="color: var(--text-muted); font-size: 13px; margin: 8px 0;" th:text="${c.description}">desc</p>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: var(--accent-amber);" th:text="'★ ' + ${c.ratingAvg}">★ 0.0</span>
+                <span style="color: var(--accent-green); font-weight: 600;"
+                      th:text="${c.price.compareTo(T(java.math.BigDecimal).ZERO) == 0 ? 'Free' : '$' + c.price}">$0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No results: fallback recommendations -->
+        <div th:if="${#lists.isEmpty(results)}" class="ro-card">
+          <div class="ro-empty">
+            <div class="ro-empty-icon">◇</div>
+            <h3 class="h5">No matches for your search</h3>
+            <p style="color: var(--text-secondary);">
+              Here are some recommendations from our most popular and newest items.
+            </p>
+          </div>
+          <div th:if="${fallback != null}" class="row">
+            <div th:each="c : ${fallback}" class="col-md-6 mb-3">
+              <div class="ro-card" style="margin-bottom: 0;">
+                <h3 class="h6">
+                  <a th:href="@{/catalog/detail/course/{id}(id=${c.id})}"
+                     style="color: var(--text-primary);"
+                     th:text="${c.title}">title</a>
+                </h3>
+                <div style="color: var(--text-secondary); font-size: 13px;" th:text="${c.authorName}">author</div>
+                <span style="color: var(--accent-amber);" th:text="'★ ' + ${c.ratingAvg}">★</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </div>

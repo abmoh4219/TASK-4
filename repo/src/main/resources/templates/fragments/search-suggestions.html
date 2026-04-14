@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="dropdown" class="ro-suggestions-inner">
+
+  <div th:if="${didYouMean != null}" class="ro-suggestion-item" style="background: var(--bg-hover);">
+    Did you mean
+    <a th:href="@{/catalog(q=${didYouMean})}"
+       style="color: var(--accent); font-weight: 600;"
+       th:text="${didYouMean}">term</a>?
+  </div>
+
+  <div th:if="${#lists.isEmpty(items) and didYouMean == null}" class="ro-suggestion-item" style="color: var(--text-muted);">
+    No matches. Try one of the trending terms below.
+  </div>
+
+  <div th:each="c : ${items}" class="ro-suggestion-item">
+    <a th:href="@{/catalog/detail/course/{id}(id=${c.id})}"
+       style="color: var(--text-primary); display: block;">
+      <strong th:text="${c.title}">title</strong>
+      <span style="color: var(--text-secondary); margin-left: 8px; font-size: 12px;"
+            th:text="${c.code + ' · ' + (c.category ?: '')}">code · category</span>
+    </a>
+  </div>
+
+  <div th:if="${not #lists.isEmpty(trending)}" style="padding: 8px 14px; border-top: 1px solid var(--border);">
+    <div style="color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Trending</div>
+    <div>
+      <a th:each="t : ${trending}"
+         th:href="@{/catalog(q=${t.term})}"
+         class="ro-role-badge ro-role-student"
+         style="margin-right: 6px; margin-bottom: 6px; text-decoration: none;"
+         th:text="${t.term}">term</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>
