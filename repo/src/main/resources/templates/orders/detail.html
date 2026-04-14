@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Order detail', ~{::section})}">
+  <section>
+    <div class="ro-card" style="max-width: 800px;">
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+          <h1 class="h3" th:text="'Order #' + ${order.id}">Order</h1>
+          <div style="color: var(--text-muted); font-size: 12px;" th:text="'Correlation: ' + ${order.correlationId}">corr</div>
+        </div>
+        <span th:class="'ro-status ro-status-' + ${#strings.toLowerCase(order.status.name())}"
+              th:text="${order.status}">STATUS</span>
+      </div>
+
+      <!-- 30-minute countdown (only while in PAYING) -->
+      <div th:if="${order.status.name() == 'PAYING'}" class="mt-3">
+        <span style="color: var(--text-secondary);">Time remaining to pay:</span>
+        <span class="ro-countdown" th:attr="data-expires-at=${expiresAt}">--:--</span>
+      </div>
+
+      <h2 class="h6 mt-4">Items</h2>
+      <table class="table">
+        <thead><tr><th>Item</th><th>Qty</th><th>Subtotal</th></tr></thead>
+        <tbody>
+          <tr th:each="i : ${items}">
+            <td th:text="${i.itemName}">name</td>
+            <td th:text="${i.quantity}">1</td>
+            <td th:text="'$' + ${i.subtotal}">$0</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr><th colspan="2">Total</th><th th:text="'$' + ${order.totalAmount}">$0</th></tr>
+        </tfoot>
+      </table>
+
+      <!-- Order timeline -->
+      <h2 class="h6 mt-4">Timeline</h2>
+      <ul class="ro-timeline">
+        <li th:class="${order.status.name() != 'CREATED'} ? 'done'">
+          <strong>Created</strong>
+          <div style="color: var(--text-muted); font-size: 12px;"
+               th:text="${#temporals.format(order.createdAt, 'yyyy-MM-dd HH:mm')}">when</div>
+        </li>
+        <li th:if="${order.status.name() == 'PAYING' or order.status.name() == 'PAID' or order.status.name() == 'REFUNDED'}"
+            th:class="${order.status.name() != 'PAYING'} ? 'done'">
+          <strong>Awaiting payment</strong>
+        </li>
+        <li th:if="${order.paidAt != null}" class="done">
+          <strong>Paid</strong>
+          <div style="color: var(--text-muted); font-size: 12px;"
+               th:text="${#temporals.format(order.paidAt, 'yyyy-MM-dd HH:mm')}">when</div>
+        </li>
+        <li th:if="${order.canceledAt != null}" class="done">
+          <strong>Canceled</strong>
+          <div style="color: var(--text-muted); font-size: 12px;"
+               th:text="${order.cancelReason}">reason</div>
+        </li>
+        <li th:if="${order.refundedAt != null}" class="done">
+          <strong>Refunded</strong>
+          <div style="color: var(--text-muted); font-size: 12px;"
+               th:text="${#temporals.format(order.refundedAt, 'yyyy-MM-dd HH:mm')}">when</div>
+        </li>
+      </ul>
+
+      <!-- Action buttons depending on state -->
+      <div class="mt-4 d-flex gap-2">
+        <form th:if="${order.status.name() == 'PAYING'}"
+              th:action="@{/orders/{id}/pay(id=${order.id})}" method="post" class="d-inline m-0">
+          <button type="submit" class="btn btn-primary">Confirm payment</button>
+        </form>
+        <form th:if="${order.status.name() == 'CREATED' or order.status.name() == 'PAYING'}"
+              th:action="@{/orders/{id}/cancel(id=${order.id})}" method="post" class="d-inline m-0">
+          <input type="hidden" name="reason" value="User canceled"/>
+          <button type="submit" class="btn btn-outline-light">Cancel order</button>
+        </form>
+        <form th:if="${refundAllowed}"
+              th:action="@{/orders/{id}/refund(id=${order.id})}" method="post" class="d-inline m-0">
+          <button type="submit" class="btn btn-danger">Request refund</button>
+        </form>
+        <a th:href="@{/orders}" class="btn btn-outline-light">Back to orders</a>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

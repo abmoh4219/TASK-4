@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout/base :: layout('Checkout', ~{::section})}">
+  <section>
+    <div class="ro-card" style="max-width: 600px;">
+      <h1 class="h4 mb-3">Checkout</h1>
+      <table class="table">
+        <tbody>
+          <tr><th>Item</th> <td th:text="${course.title}">title</td></tr>
+          <tr><th>Code</th> <td th:text="${course.code}">code</td></tr>
+          <tr><th>Price</th><td th:text="'$' + ${course.price}">$0</td></tr>
+        </tbody>
+      </table>
+      <form th:action="@{/orders/create}" method="post">
+        <input type="hidden" name="itemType" th:value="${itemType}"/>
+        <input type="hidden" name="itemId" th:value="${course.id}"/>
+        <input type="hidden" name="correlationId" th:value="${correlationId}"/>
+        <button type="submit" class="btn btn-primary">Place order</button>
+        <a th:href="@{/catalog/detail/{type}/{id}(type=${itemType},id=${course.id})}"
+           class="btn btn-outline-light">Cancel</a>
+      </form>
+      <p class="mt-3" style="color: var(--text-muted); font-size: 12px;">
+        After placing the order you have 30 minutes to confirm payment, otherwise it auto-cancels.
+      </p>
+    </div>
+  </section>
+</div>
+</body>
+</html>

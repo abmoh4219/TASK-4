@@ -4,8 +4,29 @@
 <div th:replace="~{layout/base :: layout('Orders', ~{::section})}">
   <section>
     <div class="ro-card">
-      <h1 class="h3 mb-3">My Orders</h1>
-      <p style="color: var(--text-secondary);">Order list and 30-minute countdown will be implemented in Phase 4.</p>
+      <h1 class="h4 mb-3">My Orders</h1>
+      <div th:if="${#lists.isEmpty(orders)}" class="ro-empty">
+        <div class="ro-empty-icon">◇</div>
+        <p>No orders yet.</p>
+        <a th:href="@{/catalog}" class="btn btn-primary">Browse catalog</a>
+      </div>
+      <table th:if="${not #lists.isEmpty(orders)}" class="table">
+        <thead>
+          <tr><th>#</th><th>Status</th><th>Total</th><th>Created</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr th:each="o : ${orders}">
+            <td><a th:href="@{/orders/{id}(id=${o.id})}" th:text="'#' + ${o.id}">#1</a></td>
+            <td>
+              <span th:class="'ro-status ro-status-' + ${#strings.toLowerCase(o.status.name())}"
+                    th:text="${o.status}">STATUS</span>
+            </td>
+            <td th:text="'$' + ${o.totalAmount}">$0</td>
+            <td th:text="${#temporals.format(o.createdAt, 'yyyy-MM-dd HH:mm')}">date</td>
+            <td><a th:href="@{/orders/{id}(id=${o.id})}" class="btn btn-sm btn-outline-light">View</a></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </div>
