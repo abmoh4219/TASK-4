@@ -7,3 +7,4 @@ uploads/
 .idea/
 *.iml
 .mvn/wrapper/dists/
+.claude/
