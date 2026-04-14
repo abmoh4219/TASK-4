@@ -179,14 +179,14 @@
 > Goal: Every page premium, every role has full dashboard, REST APIs documented
 > Complete all tasks continuously, then pause. Wait for "proceed".
 
-- [ ] 7.1 Create templates/dashboard/index.html — role-specific dashboard (single template, conditionals by role):
+- [x] 7.1 Create templates/dashboard/index.html — role-specific dashboard (single template, conditionals by role):
        STUDENT: today's enrolled courses, pending orders with countdown badges, recent grades, unread notifications count
        FACULTY: courses to grade (with completion %), open evaluation cycles, recent activity
        REVIEWER: submitted cycles awaiting review (count badge), outlier summary
        ADMIN: system stats (user count, order volume, active courses), recent audit entries, pending retry jobs, import history
-- [ ] 7.2 Create src/controller/DashboardController.java — GET / → loads role-specific dashboard data from services, adds to Model, renders dashboard/index.html
-- [ ] 7.3 Complete templates/auth/login.html — ensure it's visually stunning: full-screen dark background, centered premium card, logo, gradient accent on submit button, copyright footer
-- [ ] 7.4 Final UI pass — ALL pages must have:
+- [x] 7.2 Create src/controller/DashboardController.java — GET / → loads role-specific dashboard data from services, adds to Model, renders dashboard/index.html
+- [x] 7.3 Complete templates/auth/login.html — ensure it's visually stunning: full-screen dark background, centered premium card, logo, gradient accent on submit button, copyright footer
+- [x] 7.4 Final UI pass — ALL pages must have:
        Consistent dark theme using CSS variables from CLAUDE.md (--bg-primary, --accent etc.)
        Status badges with correct colors per CLAUDE.md spec
        Skeleton loading for HTMX-loaded sections (CSS shimmer)
@@ -194,14 +194,14 @@
        Flash messages (success in green, error in red, info in blue) auto-dismiss after 4 seconds
        Breadcrumb navigation in topbar
        Responsive layout (Bootstrap 5 grid, mobile-friendly sidebar collapse)
-- [ ] 7.5 Create REST API endpoints for external integration (in api/ controllers):
+- [x] 7.5 Create REST API endpoints for external integration (in api/ controllers):
        GET /api/v1/students (ADMIN + REVIEWER only, paginated)
        GET /api/v1/students/{id}/grades
        GET /api/v1/courses (all roles)
        GET /api/v1/courses/{id}/grades (FACULTY + ADMIN)
        GET /api/v1/reports/gpa-summary (ADMIN)
        All require session auth + role check via @PreAuthorize. Return JSON (Accept: application/json). CSRF not required for GET. POST APIs require CSRF token in X-XSRF-TOKEN header.
-- [ ] 7.6 Verify: docker compose up --build → every page renders → no Thymeleaf template errors → every role sees correct sidebar items → UI looks premium throughout.
+- [x] 7.6 Verify: docker compose up --build → every page renders → no Thymeleaf template errors → every role sees correct sidebar items → UI looks premium throughout.
 
 **Phase 7 checkpoint: QA logs in as each of 4 roles → correct sidebar → premium dashboard → every navigation link leads to functional page → UI is visually polished and consistent.**
 

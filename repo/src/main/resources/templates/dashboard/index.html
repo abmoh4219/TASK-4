@@ -4,14 +4,146 @@
 <body>
 <div th:replace="~{layout/base :: layout('Dashboard', ~{::section})}">
   <section>
+
     <div class="ro-card">
-      <h1 class="h3 mb-2">Welcome to RegistrarOps</h1>
-      <p style="color: var(--text-secondary);">
-        Signed in as <strong sec:authentication="name">user</strong>.
-      </p>
-      <p style="color: var(--text-muted);">
-        Phase 0 scaffold is live. Subsequent phases will populate dashboards with real data.
-      </p>
+      <h1 class="h3 mb-1">
+        Welcome, <span th:text="${currentUser.fullName ?: currentUser.username}">user</span>
+      </h1>
+      <div style="color: var(--text-secondary);">
+        <span sec:authorize="hasRole('ADMIN')"    class="ro-role-badge ro-role-admin">Administrator</span>
+        <span sec:authorize="hasRole('FACULTY')"  class="ro-role-badge ro-role-faculty">Faculty</span>
+        <span sec:authorize="hasRole('REVIEWER')" class="ro-role-badge ro-role-reviewer">Department Reviewer</span>
+        <span sec:authorize="hasRole('STUDENT')"  class="ro-role-badge ro-role-student">Student</span>
+        &nbsp;·&nbsp;
+        <span th:text="${unreadCount}">0</span> unread message<span th:if="${unreadCount != 1}">s</span>
+      </div>
+    </div>
+
+    <!-- STUDENT dashboard -->
+    <div sec:authorize="hasRole('STUDENT')">
+      <div class="row">
+        <div class="col-md-4">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Active enrollments</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${#lists.size(enrollments)}">0</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Orders</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${#lists.size(orders)}">0</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Recorded grades</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${#lists.size(grades)}">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="ro-card">
+        <h2 class="h6">Recent orders</h2>
+        <table class="table" th:if="${not #lists.isEmpty(orders)}">
+          <thead><tr><th>#</th><th>Status</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr th:each="o,it : ${orders}" th:if="${it.index < 5}">
+              <td><a th:href="@{/orders/{id}(id=${o.id})}" th:text="'#' + ${o.id}">#1</a></td>
+              <td><span th:class="'ro-status ro-status-' + ${#strings.toLowerCase(o.status.name())}" th:text="${o.status}">STATUS</span></td>
+              <td th:text="'$' + ${o.totalAmount}">$0</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="ro-empty" th:if="${#lists.isEmpty(orders)}">
+          No orders yet. <a th:href="@{/catalog}">Browse the catalog →</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- FACULTY dashboard -->
+    <div sec:authorize="hasRole('FACULTY')">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="ro-card">
+            <h2 class="h6">Courses to grade</h2>
+            <ul style="list-style: none; padding: 0;">
+              <li th:each="c,it : ${courses}" th:if="${it.index < 5}" style="padding: 6px 0;">
+                <a th:href="@{/grades/{id}/entry(id=${c.id})}" th:text="${c.code} + ' · ' + ${c.title}">code · title</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="ro-card">
+            <h2 class="h6">My evaluation cycles</h2>
+            <ul style="list-style: none; padding: 0;">
+              <li th:each="c : ${openCycles}" style="padding: 6px 0;">
+                <a th:href="@{/evaluations/{id}(id=${c.id})}" th:text="${c.title}">title</a>
+                <span class="ro-role-badge ro-role-faculty" th:text="${c.status}">status</span>
+              </li>
+              <li th:if="${#lists.isEmpty(openCycles)}" style="color: var(--text-muted);">None yet.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REVIEWER dashboard -->
+    <div sec:authorize="hasRole('REVIEWER')">
+      <div class="ro-card">
+        <h2 class="h6">Cycles awaiting review</h2>
+        <div th:if="${#lists.isEmpty(submittedCycles)}" class="ro-empty">
+          <div class="ro-empty-icon">✓</div>
+          <p>No cycles awaiting review.</p>
+        </div>
+        <table th:if="${not #lists.isEmpty(submittedCycles)}" class="table">
+          <thead><tr><th>#</th><th>Title</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr th:each="c : ${submittedCycles}">
+              <td th:text="${c.id}">1</td>
+              <td th:text="${c.title}">title</td>
+              <td><span class="ro-role-badge ro-role-reviewer" th:text="${c.status}">SUBMITTED</span></td>
+              <td><a th:href="@{/evaluations/{id}/review(id=${c.id})}" class="btn btn-sm btn-primary">Review</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ADMIN dashboard -->
+    <div sec:authorize="hasRole('ADMIN')">
+      <div class="row">
+        <div class="col-md-3">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Users</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${userCount}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Courses</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${courseCount}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Orders</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${orderCount}">0</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="ro-card">
+            <div style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Audit log</div>
+            <div style="font-size: 32px; font-weight: 700;" th:text="${auditCount}">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="ro-card">
+        <h2 class="h6">Quick links</h2>
+        <a th:href="@{/admin/users}"  class="btn btn-outline-light me-2">Manage users</a>
+        <a th:href="@{/admin/import}" class="btn btn-outline-light me-2">Import CSV</a>
+        <a th:href="@{/admin/audit}"  class="btn btn-outline-light me-2">Audit log</a>
+        <a th:href="@{/admin/config}" class="btn btn-outline-light">System config</a>
+      </div>
     </div>
   </section>
 </div>
