@@ -59,6 +59,19 @@ class Cycle2RemediationTest extends AbstractIntegrationTest {
         policySettingService.set("retry.max_attempts",              "3",  1L, "admin");
         policySettingService.set("notifications.quiet_start_hour",  "22", 1L, "admin");
         policySettingService.set("notifications.quiet_end_hour",    "7",  1L, "admin");
+
+        // Un-soft-delete the student account. exportTokenWorksWithoutAuthentication
+        // calls AccountDeletionService.exportAndSoftDelete(), which stamps
+        // deletedAt / isActive=false / exportFilePath on the user row.
+        // Testcontainers shares MySQL state across classes, so unless we
+        // restore the row, AuthApiTest and SecurityHardeningTest later fail
+        // because the student can no longer log in.
+        userRepository.findByUsername("student").ifPresent(u -> {
+            u.setDeletedAt(null);
+            u.setExportFilePath(null);
+            u.setIsActive(true);
+            userRepository.save(u);
+        });
     }
 
     // ---------- 1. Export token works without authentication ----------------
