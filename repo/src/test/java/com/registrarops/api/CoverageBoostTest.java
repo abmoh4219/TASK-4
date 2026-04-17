@@ -60,6 +60,13 @@ class CoverageBoostTest extends AbstractIntegrationTest {
             u.setIsActive(true);
             userRepository.save(u);
         });
+        // Delete any transient users created by adminCreateUser* tests so that
+        // tests in other classes (e.g. SecurityHardeningTest.testStudentsApiTotalsOnlyIncludeStudents)
+        // never see extra student rows left over from this class's runs.
+        userRepository.findAll().stream()
+                .filter(u -> u.getUsername().startsWith("covboost_")
+                          || u.getUsername().startsWith("weakpass_"))
+                .forEach(userRepository::delete);
     }
 
     // ------- DashboardController per role ----------------------------------

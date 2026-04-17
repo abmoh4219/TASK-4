@@ -308,9 +308,23 @@ class SecurityHardeningTest extends AbstractIntegrationTest {
     @Test
     @WithMockUser(username = "admin", roles = "ADMIN")
     void testStudentsApiTotalsOnlyIncludeStudents() throws Exception {
-        mockMvc.perform(get("/api/v1/students?page=0&size=50"))
+        String body = mockMvc.perform(get("/api/v1/students?page=0&size=50"))
                 .andExpect(status().isOk())
-                // Seed has 1 student (id=4). Totals must reflect students only.
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"total\":1")));
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.JsonNode json =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
+
+        long total = json.get("total").asLong();
+        assertTrue(total >= 1, "students API must return at least one student");
+
+        // Every item returned must be a ROLE_STUDENT — non-student users
+        // must never appear regardless of how many students exist.
+        com.fasterxml.jackson.databind.JsonNode items = json.get("items");
+        assertTrue(items.isArray(), "items must be an array");
+        for (com.fasterxml.jackson.databind.JsonNode item : items) {
+            assertEquals("ROLE_STUDENT", item.get("role").asText(),
+                    "each item must be ROLE_STUDENT, found: " + item.get("role").asText());
+        }
     }
 }

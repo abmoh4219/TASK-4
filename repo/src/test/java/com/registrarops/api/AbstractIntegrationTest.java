@@ -1,7 +1,7 @@
 package com.registrarops.api;
 
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -41,15 +41,20 @@ public abstract class AbstractIntegrationTest {
     private Flyway flyway;
 
     /**
-     * Reset the database before every test method when we're talking to an
-     * external (shared) MySQL. This drops every Flyway-managed table and
-     * re-applies V001..V013 so the seed data is fresh and tests can't
-     * pollute each other.
+     * Reset the database once per test class when talking to the shared
+     * external MySQL. Drops every Flyway-managed table and re-applies all
+     * migrations so every test class starts from the clean seed state.
      *
-     * When the in-memory {@link MySQLContainer} is in use, Testcontainers
-     * already gives every test class its own database, so we skip the reset.
+     * Running once per class (not once per method) is safe because
+     * individual tests that mutate state are responsible for restoring it
+     * in their own @AfterEach teardown. This avoids the ~4-second
+     * Flyway clean+migrate overhead being paid for every single test method,
+     * which was the main cause of the 20-30 minute full-suite runtimes.
+     *
+     * When Testcontainers MySQL is in use each class already gets its own
+     * fresh container, so we skip the reset entirely.
      */
-    @BeforeEach
+    @BeforeAll
     void resetSchema() {
         if (USE_EXTERNAL && flyway != null) {
             flyway.clean();
