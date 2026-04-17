@@ -75,5 +75,24 @@ services:
       mysql:
         condition: service_healthy
 
+  frontend-test:
+    profiles: ["frontend"]
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+
+  e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    environment:
+      BASE_URL: http://app:8080
+    depends_on:
+      app:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:

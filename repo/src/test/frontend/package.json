@@ -1,0 +1,21 @@
+{
+  "name": "registrarops-frontend-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JSDOM-based unit tests for the Thymeleaf SSR app's static JS (countdown timer, HTMX CSRF hook, search keyboard navigation).",
+  "scripts": {
+    "test": "jest --coverage",
+    "test:ci": "jest --coverage --ci"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "rootDir": ".",
+    "roots": ["<rootDir>/unit_tests"],
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["text-summary"]
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  }
+}

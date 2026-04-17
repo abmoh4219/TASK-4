@@ -1,0 +1,10 @@
+FROM node:20-alpine
+WORKDIR /app
+RUN mkdir -p /app/src/main/resources/static/js /app/src/test/frontend/unit_tests
+COPY src/test/frontend/package.json /app/src/test/frontend/package.json
+WORKDIR /app/src/test/frontend
+RUN npm install --no-audit --no-fund --prefer-offline --loglevel=error
+# Bring in the JS under test plus the tests themselves.
+COPY src/main/resources/static/js /app/src/main/resources/static/js
+COPY src/test/frontend /app/src/test/frontend
+CMD ["npm", "test"]

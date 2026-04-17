@@ -5,35 +5,26 @@ echo "========================================"
 echo "  RegistrarOps Test Suite"
 echo "========================================"
 
-# This script is the single entry point for the test suite. It always
-# runs the tests inside a Docker container — no Java, no Maven, no Node,
-# no PHP, nothing else has to be installed on the host machine. Docker
-# is the only required dependency.
+# Single entry point for all four test suites:
+#   1. Backend unit tests      (JUnit + Mockito, no DB)
+#   2. Backend API tests       (Spring Boot + Testcontainers / real MySQL)
+#   3. Frontend unit tests     (Jest + JSDOM, static/js/*.js)
+#   4. Frontend end-to-end     (Playwright against the running app+MySQL)
 #
-# When you run ./run_tests.sh on the host:
-#   1. We check Docker is installed and reachable.
-#   2. We delegate to `docker compose --profile test run --rm --build test`,
-#      which builds Dockerfile.test (Maven + JDK 17 image) and runs this
-#      same script INSIDE the container.
-#   3. Inside the container, we detect /.dockerenv and execute Maven
-#      directly against the bundled JDK — that's where the real work
-#      happens.
-#
-# The exit code propagates: 0 if all tests pass, non-zero on any failure.
+# Everything runs inside Docker — the host only needs Docker + Compose.
 
-# ── Inside-container path ───────────────────────────────────────────────────
-# Docker creates /.dockerenv inside every container. We use that as the
-# unambiguous signal that we are already running inside the test image,
-# so we should run Maven directly rather than recursing into Docker.
-if [ -f /.dockerenv ]; then
+# ── Inside-container path (backend suites only) ────────────────────────────
+# Docker creates /.dockerenv inside every container. The `test` service in
+# compose sets SUITE=backend and this branch runs Maven there.
+if [ -f /.dockerenv ] && [ "${SUITE:-backend}" = "backend" ]; then
   echo ""
-  echo "Running Maven inside the test container (Java 17 from the image)..."
+  echo "Running Maven inside the backend test container..."
   echo ""
 
   UNIT_FAILED=0
   API_FAILED=0
 
-  echo "--- Unit Tests (src/test/java/.../unit/) ---"
+  echo "--- 1. Backend Unit Tests (src/test/java/.../unit/) ---"
   mvn test -Dtest='com.registrarops.unit.**' \
     -DfailIfNoTests=false \
     --no-transfer-progress \
@@ -41,46 +32,41 @@ if [ -f /.dockerenv ]; then
   [ $UNIT_FAILED -eq 0 ] && echo "Unit Tests PASSED" || echo "Unit Tests FAILED"
 
   echo ""
-  echo "--- API / Integration Tests (src/test/java/.../api/) ---"
+  echo "--- 2. Backend API / Integration Tests (src/test/java/.../api/) ---"
   mvn test -Dtest='com.registrarops.api.**' \
     -DfailIfNoTests=false \
     --no-transfer-progress \
     -Dspring.profiles.active=test 2>&1 || API_FAILED=1
   [ $API_FAILED -eq 0 ] && echo "API Tests PASSED" || echo "API Tests FAILED"
 
-  echo ""
-  echo "========================================"
   TOTAL=$((UNIT_FAILED + API_FAILED))
   if [ $TOTAL -eq 0 ]; then
-    echo "  ALL TESTS PASSED"
+    echo ""
+    echo "Backend suites PASSED inside container."
     exit 0
   fi
-  echo "  SOME TESTS FAILED"
+  echo ""
+  echo "Backend suites FAILED inside container."
   echo "  Unit Tests: $([ $UNIT_FAILED -eq 0 ] && echo PASS || echo FAIL)"
   echo "  API Tests:  $([ $API_FAILED -eq 0 ] && echo PASS || echo FAIL)"
   exit 1
 fi
 
-# ── Host path: delegate to Docker ───────────────────────────────────────────
+# ── Host path: orchestrate all four suites via Docker Compose ──────────────
 if ! command -v docker > /dev/null 2>&1; then
   echo ""
   echo "ERROR: Docker is not installed."
-  echo "This project's tests run entirely inside a container — Docker is the"
+  echo "This project's tests run entirely inside containers — Docker is the"
   echo "only required dependency on the host machine."
-  echo ""
-  echo "Install Docker: https://docs.docker.com/get-docker/"
   exit 1
 fi
 
 if ! docker info > /dev/null 2>&1; then
   echo ""
-  echo "ERROR: Docker is installed but the daemon is not reachable."
-  echo "Start Docker Desktop (or the Docker service) and try again."
+  echo "ERROR: Docker daemon is not reachable. Start Docker and try again."
   exit 1
 fi
 
-# Compose v2 (`docker compose`) is the modern entry point. Fall back to
-# the legacy v1 binary (`docker-compose`) only if v2 is unavailable.
 if docker compose version > /dev/null 2>&1; then
   COMPOSE="docker compose"
 elif command -v docker-compose > /dev/null 2>&1; then
@@ -88,44 +74,59 @@ elif command -v docker-compose > /dev/null 2>&1; then
 else
   echo ""
   echo "ERROR: Docker Compose is not installed."
-  echo "Install Docker Desktop (which bundles Compose v2):"
-  echo "  https://docs.docker.com/compose/install/"
   exit 1
 fi
 
-echo ""
-echo "Delegating to Docker (no local Java/Maven required)..."
-echo ""
-
-# Stay in the directory that holds docker-compose.yml so relative paths
-# work even when the script is invoked from another working directory.
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
-# `--profile test` activates the `test` service in docker-compose.yml.
-# `run --rm --build` rebuilds the test image (so source changes are picked
-# up), runs the container once, and removes it on exit. Inside the
-# container, this same script re-enters the inside-container path above
-# (via /.dockerenv detection) and runs mvn directly.
-# TESTCONTAINERS_RYUK_DISABLED=true skips the Ryuk reaper sidecar, which
-# can fail to be reached from inside our test container due to Docker
-# bridge networking when the parent runs in a compose-managed network.
-# Ryuk's only job is to clean up sibling containers if the parent JVM
-# crashes — here `--rm` already removes the test container on exit, so
-# the JVM's own MySQLContainer.stop() is enough.
+BACKEND_EXIT=0
+FRONTEND_EXIT=0
+E2E_EXIT=0
+
+echo ""
+echo "========================================"
+echo "  1/4 + 2/4: Backend unit + API tests"
+echo "========================================"
 set +e
 $COMPOSE --profile test run --rm --build \
   -e TESTCONTAINERS_RYUK_DISABLED=true \
   test
-EXIT_CODE=$?
+BACKEND_EXIT=$?
 set -e
 
 echo ""
 echo "========================================"
-if [ $EXIT_CODE -eq 0 ]; then
-  echo "  ALL TESTS PASSED"
-else
-  echo "  SOME TESTS FAILED (exit code $EXIT_CODE)"
-fi
+echo "  3/4: Frontend unit tests (Jest + JSDOM)"
 echo "========================================"
-exit $EXIT_CODE
+set +e
+$COMPOSE --profile frontend run --rm --build frontend-test
+FRONTEND_EXIT=$?
+set -e
+
+echo ""
+echo "========================================"
+echo "  4/4: End-to-end tests (Playwright)"
+echo "========================================"
+# E2E needs the live app + MySQL running on the compose network. Bring them
+# up, wait for health, then run the e2e service, then tear down.
+set +e
+$COMPOSE up -d --build app mysql
+$COMPOSE --profile e2e run --rm --build e2e
+E2E_EXIT=$?
+$COMPOSE down
+set -e
+
+echo ""
+echo "========================================"
+TOTAL=$((BACKEND_EXIT + FRONTEND_EXIT + E2E_EXIT))
+echo "  Backend (unit+API): $([ $BACKEND_EXIT -eq 0 ] && echo PASS || echo FAIL)"
+echo "  Frontend unit:      $([ $FRONTEND_EXIT -eq 0 ] && echo PASS || echo FAIL)"
+echo "  Frontend e2e:       $([ $E2E_EXIT -eq 0 ] && echo PASS || echo FAIL)"
+echo "========================================"
+if [ $TOTAL -eq 0 ]; then
+  echo "  ALL FOUR SUITES PASSED"
+  exit 0
+fi
+echo "  ONE OR MORE SUITES FAILED"
+exit 1

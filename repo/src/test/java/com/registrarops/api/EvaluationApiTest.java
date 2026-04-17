@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -33,8 +34,15 @@ class EvaluationApiTest extends AbstractIntegrationTest {
                 "application/pdf", "%PDF-1.4 fake content".getBytes());
         mockMvc.perform(multipart("/evaluations/{id}/evidence", c.getId())
                         .file(pdf).with(csrf()))
-                .andExpect(status().is3xxRedirection());
-        assertFalse(evaluationService.evidenceFor(c.getId()).isEmpty());
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("/evaluations/*"));
+
+        var evidence = evaluationService.evidenceFor(c.getId());
+        assertFalse(evidence.isEmpty(), "evidence attachment must be persisted");
+        assertEquals("report.pdf", evidence.get(0).getOriginalFilename(),
+                "stored filename must match uploaded filename");
+        assertEquals("application/pdf", evidence.get(0).getMimeType(),
+                "stored MIME type must match uploaded MIME type");
     }
 
     @Test

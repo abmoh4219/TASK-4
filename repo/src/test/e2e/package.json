@@ -1,0 +1,13 @@
+{
+  "name": "registrarops-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for RegistrarOps (real Chromium against the running Spring Boot app).",
+  "scripts": {
+    "test": "playwright test",
+    "test:ci": "playwright test --reporter=line,html"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.47.0"
+  }
+}

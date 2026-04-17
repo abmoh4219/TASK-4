@@ -22,7 +22,8 @@ class CatalogApiTest extends AbstractIntegrationTest {
     void testSearchReturnsResults() throws Exception {
         mockMvc.perform(get("/catalog").param("q", "calculus"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Calculus")));
+                .andExpect(content().string(containsString("Calculus")))
+                .andExpect(content().string(containsString("MATH201")));
     }
 
     @Test
@@ -30,7 +31,8 @@ class CatalogApiTest extends AbstractIntegrationTest {
     void testFilterByCategory() throws Exception {
         mockMvc.perform(get("/catalog").param("category", "Mathematics"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Calculus")));
+                .andExpect(content().string(containsString("Calculus")))
+                .andExpect(content().string(containsString("MATH201")));
     }
 
     @Test

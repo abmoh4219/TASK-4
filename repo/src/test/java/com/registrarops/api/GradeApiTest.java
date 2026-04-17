@@ -63,8 +63,18 @@ class GradeApiTest extends AbstractIntegrationTest {
                         .param("componentName", "coursework")
                         .param("score", "85")
                         .param("maxScore", "100"))
-                .andExpect(status().is3xxRedirection());
-        assertFalse(gradeComponentRepository.findByCourseIdAndStudentId(1L, 4L).isEmpty());
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("/grades/**"));
+
+        var saved = gradeComponentRepository.findByCourseIdAndStudentId(1L, 4L);
+        assertFalse(saved.isEmpty(), "component must be persisted");
+        var comp = saved.stream()
+                .filter(c -> "coursework".equals(c.getComponentName()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(0, comp.getScore().compareTo(new java.math.BigDecimal("85")),
+                "saved score must match submitted value");
+        assertEquals(0, comp.getMaxScore().compareTo(new java.math.BigDecimal("100")));
     }
 
     @Test
@@ -78,7 +88,9 @@ class GradeApiTest extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/grades/report"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Academic Report")));
+                .andExpect(content().string(containsString("Academic Report")))
+                .andExpect(content().string(containsString("Calculus II")))
+                .andExpect(content().string(containsString("B+")));
     }
 
     @Test
