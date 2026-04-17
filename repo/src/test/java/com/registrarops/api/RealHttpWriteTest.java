@@ -557,9 +557,12 @@ class RealHttpWriteTest extends AbstractIntegrationTest {
         Session s = login("faculty", "Faculty@Reg2024!");
         get(s, "/grades/1/entry");  // prime CSRF
 
+        // Use a unique component name so GradeApiTest's "coursework" row (score=85)
+        // left in the shared Testcontainers DB does not interfere with this assertion.
+        String compName = "rh_final_" + System.currentTimeMillis();
         MultiValueMap<String, String> f = new LinkedMultiValueMap<>();
         f.add("studentId",     "4");
-        f.add("componentName", "coursework");
+        f.add("componentName", compName);
         f.add("score",         "92");
         f.add("maxScore",      "100");
         ResponseEntity<String> r = post(s, "/grades/1/components", f);
@@ -569,9 +572,9 @@ class RealHttpWriteTest extends AbstractIntegrationTest {
         var saved = gradeComponentRepository.findByCourseIdAndStudentId(1L, 4L);
         assertFalse(saved.isEmpty(), "component must be persisted in DB");
         var comp = saved.stream()
-                .filter(c -> "coursework".equals(c.getComponentName()))
+                .filter(c -> compName.equals(c.getComponentName()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("coursework component not found"));
+                .orElseThrow(() -> new AssertionError(compName + " component not found"));
         assertEquals(0, comp.getScore().compareTo(new java.math.BigDecimal("92")),
                 "saved score must match submitted value");
     }

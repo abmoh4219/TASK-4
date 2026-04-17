@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.registrarops.entity.EvaluationStatus;
 import com.registrarops.repository.EvaluationCycleRepository;
+import com.registrarops.repository.LoginAttemptRepository;
 import com.registrarops.repository.RetryJobRepository;
 import com.registrarops.repository.UserRepository;
 import com.registrarops.service.ImportExportService;
 import com.registrarops.service.PolicySettingService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -42,6 +44,7 @@ class RealHttpCoverageTest extends AbstractIntegrationTest {
     @Autowired private RetryJobRepository retryJobRepository;
     @Autowired private ImportExportService importExportService;
     @Autowired private PolicySettingService policySettingService;
+    @Autowired private LoginAttemptRepository loginAttemptRepository;
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern CSRF_PAT =
@@ -49,6 +52,30 @@ class RealHttpCoverageTest extends AbstractIntegrationTest {
 
     /** Usernames created during tests — deleted in @AfterEach. */
     private final List<String> createdUsernames = new ArrayList<>();
+
+    /**
+     * In Testcontainers mode {@code resetSchema()} is a no-op, so all test classes
+     * share one MySQL instance and state from previous classes accumulates.
+     *
+     * The critical issue: {@code AuthApiTest.testAccountLockedAfter5Attempts} leaves
+     * 6 failed-login rows for the {@code faculty} user in {@code login_attempts}.
+     * Without clearing them here, every faculty login in this class is rejected
+     * (/login?locked) and subsequent assertions fail with misleading body-content
+     * errors instead of a clear "login failed" message.
+     */
+    @BeforeAll
+    void resetAccumulatedCrossClassState() {
+        loginAttemptRepository.deleteAll();
+        // Restore seeded accounts that other classes may have soft-deleted.
+        for (String uname : List.of("student", "faculty", "reviewer")) {
+            userRepository.findByUsername(uname).ifPresent(u -> {
+                u.setDeletedAt(null);
+                u.setExportFilePath(null);
+                u.setIsActive(true);
+                userRepository.save(u);
+            });
+        }
+    }
 
     @AfterEach
     void cleanup() {
@@ -87,6 +114,12 @@ class RealHttpCoverageTest extends AbstractIntegrationTest {
         ResponseEntity<String> resp = rest.exchange(
                 "/login", HttpMethod.POST, new HttpEntity<>(f, h), String.class);
         assertTrue(resp.getStatusCode().is3xxRedirection(), "login must redirect");
+        String loc = resp.getHeaders().getFirst(HttpHeaders.LOCATION);
+        // Fail fast with a clear message if credentials were rejected or account locked.
+        // Without this check, a failed login silently returns an unauthenticated session
+        // and subsequent requests redirect to /login, producing confusing body-content errors.
+        assertFalse(loc != null && (loc.contains("error") || loc.contains("locked")),
+                "login rejected for user '" + username + "' — redirected to: " + loc);
         absorb(s, resp.getHeaders().get(HttpHeaders.SET_COOKIE));
         return s;
     }

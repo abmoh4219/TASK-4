@@ -1,6 +1,7 @@
 package com.registrarops.api;
 
 import com.registrarops.repository.LoginAttemptRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,15 @@ class AuthApiTest extends AbstractIntegrationTest {
     @BeforeEach
     void clearAttempts() {
         // Each test starts with a fresh failed-attempt counter so lockout state is deterministic.
+        loginAttemptRepository.deleteAll();
+    }
+
+    @AfterEach
+    void clearAttemptsAfter() {
+        // Prevent failed-login rows from leaking to subsequent test classes.
+        // Without this, testAccountLockedAfter5Attempts leaves 6 faculty lockout
+        // rows that make faculty login fail in every later test class that shares
+        // the same Testcontainers MySQL instance.
         loginAttemptRepository.deleteAll();
     }
 
